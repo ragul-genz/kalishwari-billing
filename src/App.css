@@ -168,7 +168,54 @@
 .billing-split-view { display: grid; grid-template-columns: 1fr 380px; gap: 24px; }
 .calc-panel { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 16px; }
 
-.app-footer { background: #fff; border-top: 1px solid #E2E8F0; padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #64748B; margin-top: auto; }
+.app-footer {
+  background: #fff;
+  border-top: 1px solid #E2E8F0;
+  padding: 12px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  color: #64748B;
+  margin-top: auto;
+}
+.app-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.app-footer-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.app-footer-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  flex: 1;
+  flex-wrap: wrap;
+  white-space: nowrap;
+}
+.app-footer-badge {
+  background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+  color: #E2E8F0;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
 
 .app-toast { position: fixed; top: 20px; right: 24px; z-index: 9999; background: #0F172A; color: #fff; padding: 14px 24px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 14px; animation: fadeIn 0.3s ease; max-width: calc(100vw - 40px); }
 
@@ -762,7 +809,10 @@
   .product-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
   /* FOOTER */
-  .app-footer { flex-direction: column; gap: 4px; text-align: center; padding: 12px 14px; font-size: 12px; }
+  .app-footer { flex-direction: column; gap: 8px; text-align: center; padding: 12px 14px; font-size: 12px; }
+  .app-footer-left { justify-content: center; text-align: center; }
+  .app-footer-center { order: -1; }
+  .app-footer-right { justify-content: center; gap: 10px; }
 
   /* TOAST */
   .app-toast { top: auto; bottom: 82px; left: 12px; right: 12px; border-radius: 12px; font-size: 13px; padding: 12px 16px; }
