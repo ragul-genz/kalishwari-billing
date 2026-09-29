@@ -580,7 +580,7 @@ export default function App() {
           </form>
 
           <p className="login-footer">
-            Sivakasi · Tamil Nadu · India &nbsp;•&nbsp; Powered by <strong style={{ color: '#A78BFA' }}>Genz Neural-x</strong>
+            Sivakasi · Tamil Nadu · India &nbsp;•&nbsp; Developed by <strong style={{ color: '#A78BFA' }}>Genz Neural-x</strong>
           </p>
         </div>
       </div>
@@ -1437,18 +1437,18 @@ export default function App() {
           <span>Contact: <b>{company.mobile}</b></span>
           <span style={{
             background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
-            color: '#38BDF8',
-            padding: '4px 12px',
+            color: '#E2E8F0',
+            padding: '5px 14px',
             borderRadius: '20px',
             fontSize: '11px',
-            fontWeight: '800',
+            fontWeight: '600',
             letterSpacing: '0.4px',
             boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '5px'
+            gap: '6px'
           }}>
-            <span style={{ color: '#F59E0B' }}>⚡</span> Powered by <strong style={{ color: '#FFFFFF' }}>Genz Neural-x</strong>
+            <span style={{ color: '#F59E0B' }}>⚡</span> Developed by <strong style={{ color: '#38BDF8', fontWeight: '800' }}>Genz Neural-x</strong>
           </span>
         </div>
       </footer>
