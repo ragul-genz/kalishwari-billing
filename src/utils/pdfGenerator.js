@@ -388,7 +388,7 @@ export const generatePdfDocument = (billData, company) => {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.text(
-    `Ph: ${company.mobile}   |   Web: www.srikaliswaricrackers.com   |   Email: ${company.email || 'sales@srikaliswaricrackers.com'}`,
+    `Ph: ${company.mobile}   |   Email: ${company.email || 'sales@srikaliswaricrackers.com'}   |   Powered by Genz Neural-x`,
     pw / 2, footerY + 9.5, { align: 'center' }
   );
 
