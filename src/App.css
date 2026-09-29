@@ -149,6 +149,21 @@
 .app-main { padding: 24px 28px; flex: 1; max-width: 1600px; margin: 0 auto; width: 100%; }
 
 .billing-top-row { background: #fff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0; display: grid; grid-template-columns: 1.2fr 2fr 2fr; gap: 24px; }
+.bill-info-col, .customer-selection-col { border-right: 1px solid #F1F5F9; padding-right: 20px; }
+.bill-field-row { display: flex; align-items: center; gap: 10px; }
+.bill-field-row label { width: 70px; flex-shrink: 0; }
+.bill-no-input { width: 90px; padding: 8px 12px; border-radius: 8px; border: 1px solid #CBD5E1; background: #F8FAFC; font-weight: 700; font-size: 14px; }
+.bill-inc-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #CBD5E1; background: #F1F5F9; cursor: pointer; font-weight: 700; }
+.bill-date-input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid #CBD5E1; background: #F8FAFC; font-weight: 600; font-size: 13px; }
+.customer-dropdown-row { display: flex; gap: 8px; align-items: center; }
+.customer-select-input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 8px; border: 1px solid #CBD5E1; background: #FFF; font-size: 13px; font-weight: 500; outline: none; }
+.customer-reset-btn { padding: 9px 16px; border-radius: 8px; border: none; background: #2563EB; color: #FFF; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.price-gst-row { display: flex; gap: 10px; }
+.price-map-box, .gst-type-box { flex: 1; min-width: 0; }
+.price-map-select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 12px; font-weight: 600; outline: none; background: #FFF; }
+.gst-type-badge { padding: 8px 10px; background: #F1F5F9; border-radius: 8px; font-size: 12px; font-weight: 700; color: #4B4DFF; text-align: center; }
+.customer-inputs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.customer-field-input { width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 13px; outline: none; box-sizing: border-box; }
 .product-add-bar { background: #fff; border-radius: 16px; padding: 16px 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 16px; }
 .billing-split-view { display: grid; grid-template-columns: 1fr 380px; gap: 24px; }
 .calc-panel { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 16px; }
@@ -219,10 +234,40 @@
   /* MAIN */
   .app-main { padding: 14px 12px 82px; }
 
-  /* BILLING TOP ROW */
+  /* BILLING TOP ROW & CUSTOMER SELECTION MOBILE */
   .billing-top-row { grid-template-columns: 1fr; gap: 0; padding: 16px 14px; }
-  .billing-top-row > div { border-right: none !important; padding-right: 0 !important; }
-  .billing-top-row > div:not(:last-child) { border-bottom: 1px solid #F1F5F9; padding-bottom: 16px; margin-bottom: 16px; }
+  .billing-col { border-right: none !important; padding-right: 0 !important; }
+  .billing-col:not(:last-child) { border-bottom: 1px solid #F1F5F9; padding-bottom: 16px; margin-bottom: 16px; }
+
+  .bill-field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .bill-no-input { flex: 1; min-width: 60px; padding: 10px 12px; font-size: 15px; }
+  .bill-inc-btn { padding: 8px 14px; font-size: 16px; border-radius: 8px; }
+  .bill-date-input { padding: 10px 12px; font-size: 14px; border-radius: 8px; }
+
+  /* Customer selection on phone */
+  .customer-dropdown-row { width: 100%; display: flex; gap: 8px; align-items: stretch; }
+  .customer-select-input {
+    flex: 1 1 0;
+    min-width: 0;
+    width: 0;
+    padding: 11px 12px;
+    font-size: 14px;
+    border-radius: 10px;
+  }
+  .customer-reset-btn {
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .price-gst-row { display: flex; gap: 10px; }
+  .price-map-select { padding: 10px 12px; font-size: 13px; border-radius: 10px; }
+  .gst-type-badge { padding: 10px 12px; font-size: 12px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+
+  /* Client / Receiver details on phone - single column for comfortable typing */
+  .customer-inputs-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+  .customer-field-input { padding: 11px 12px; font-size: 14px; border-radius: 10px; }
 
   /* PRODUCT ADD BAR */
   .product-add-bar { flex-direction: column; align-items: stretch; padding: 14px 12px; gap: 10px; }
@@ -274,6 +319,8 @@
   .mobile-nav-btn .mob-label { font-size: 9px; }
   .calc-panel { padding: 12px; }
   .billing-top-row { padding: 14px 10px; }
+  .price-gst-row { flex-direction: column; gap: 8px; }
+  .bill-field-row label { width: 55px; font-size: 12px; }
   .product-add-bar { padding: 12px 10px; }
   .login-brand { padding: 1.6rem 1.2rem 1.2rem; }
   .login-title { font-size: 1.2rem; }

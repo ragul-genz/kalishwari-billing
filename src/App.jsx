@@ -118,10 +118,10 @@ export default function App() {
     setAdditionalDiscPercent(0);
     setPackingPercent(0);
 
-    // Bill number = one after the highest saved bill in this year
+    // Bill number = one after the highest saved bill in this year, or 1 if no bills exist
     const nextBillNo = loadedInvoices.length > 0
       ? Math.max(...loadedInvoices.map(inv => Number(inv.billNo) || 0)) + 1
-      : 101;
+      : 1;
     setBillNo(nextBillNo);
   }, [activeYear]);
 
@@ -147,7 +147,7 @@ export default function App() {
   }, [savedInvoices, activeYear]);
 
   // Billing Form State
-  const [billNo, setBillNo] = React.useState(102);
+  const [billNo, setBillNo] = React.useState(1);
   const [billDate, setBillDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [priceMap, setPriceMap] = React.useState('Retail sales');
 
@@ -296,9 +296,15 @@ export default function App() {
     setSelectedProductCode('');
     setSelectedProductId('');
     setItemQty(1);
-    setDiscountPercent(90);
+    setDiscountPercent(0);
     setAdditionalDiscPercent(0);
     setPackingPercent(0);
+    // Auto-update to latest bill number based on saved invoices
+    const nextNo = savedInvoices.length > 0
+      ? Math.max(...savedInvoices.map(inv => Number(inv.billNo) || 0)) + 1
+      : 1;
+    setBillNo(nextNo);
+    showToast(`New Bill #${nextNo} Ready`);
   };
 
   // Save / Print Bill
@@ -352,7 +358,18 @@ export default function App() {
       doc.save(`Sri_Kaliswari_Bill_${billNo}_${customerName || 'Customer'}.pdf`);
     }
 
-    setBillNo(prev => prev + 1);
+    // Auto-clear form for next bill and auto-advance to next sequential bill number
+    setBillItems([]);
+    setSelectedCustomerId('');
+    setCustomerName('');
+    setCustomerMobile('');
+    setCustomerAddress('');
+    setSelectedProductCode('');
+    setSelectedProductId('');
+    setItemQty(1);
+
+    // Auto increment bill number
+    setBillNo(prev => (Number(prev) || 0) + 1);
   };
 
   if (!loggedIn) {
@@ -589,82 +606,61 @@ export default function App() {
             <div className="billing-top-row">
 
               {/* Bill Details */}
-              <div style={{ borderRight: '1px solid #F1F5F9', paddingRight: '20px' }}>
+              <div className="billing-col bill-info-col">
                 <div style={{ fontSize: '13px', fontWeight: '700', color: '#4B4DFF', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Bill Information
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                <div className="bill-field-row">
                   <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Bill No:</label>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flex: 1, minWidth: 0 }}>
                     <input
                       type="number"
                       value={billNo}
                       onChange={(e) => setBillNo(Number(e.target.value))}
-                      style={{
-                        width: '90px',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
-                        background: '#F8FAFC',
-                        fontWeight: '700',
-                        fontSize: '14px'
-                      }}
+                      className="bill-no-input"
                     />
                     <button
+                      type="button"
                       onClick={() => setBillNo(prev => prev + 1)}
-                      style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#F1F5F9', cursor: 'pointer', fontWeight: '700' }}
+                      className="bill-inc-btn"
                     >+</button>
                     <button
+                      type="button"
                       onClick={() => setBillNo(prev => Math.max(1, prev - 1))}
-                      style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#F1F5F9', cursor: 'pointer', fontWeight: '700' }}
+                      className="bill-inc-btn"
                     >-</button>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '10px', alignItems: 'center' }}>
+                <div className="bill-field-row" style={{ marginTop: '10px' }}>
                   <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Date:</label>
                   <input
                     type="date"
                     value={billDate}
                     onChange={(e) => setBillDate(e.target.value)}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      background: '#F8FAFC',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
+                    className="bill-date-input"
                   />
                 </div>
               </div>
 
               {/* Existing Customer Dropdown Search */}
-              <div style={{ borderRight: '1px solid #F1F5F9', paddingRight: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div className="billing-col customer-selection-col">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: '700', color: '#4B4DFF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Customer Selection
                   </span>
-                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '500' }}>OR Type New Details</span>
+                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '500' }}>OR Type Below</span>
                 </div>
 
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block', fontWeight: '500' }}>
                     Select Existing Client:
                   </label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="customer-dropdown-row">
                     <select
+                      className="customer-select-input"
                       value={selectedCustomerId}
                       onChange={(e) => handleSelectCustomer(e.target.value)}
-                      style={{
-                        flex: 1,
-                        padding: '9px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
-                        background: '#FFF',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
                     >
                       <option value="">-- Select Customer --</option>
                       {customers.map(c => (
@@ -674,112 +670,72 @@ export default function App() {
                       ))}
                     </select>
                     <button
+                      type="button"
+                      className="customer-reset-btn"
                       onClick={() => handleSelectCustomer('')}
-                      style={{
-                        padding: '8px 14px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: '#2563EB',
-                        color: '#FFF',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: '600'
-                      }}
                     >
                       Reset
                     </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block' }}>Price Map</label>
+                <div className="price-gst-row">
+                  <div className="price-map-box">
+                    <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block', fontWeight: '600' }}>Price Map</label>
                     <select
+                      className="price-map-select"
                       value={priceMap}
                       onChange={(e) => setPriceMap(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
-                        fontSize: '12px',
-                        fontWeight: '600'
-                      }}
                     >
                       <option value="Retail sales">Retail Sales</option>
                       <option value="Wholesale">Wholesale Standard</option>
                       <option value="Special Dealer">Special Dealer</option>
                     </select>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block' }}>GST Type</label>
-                    <div style={{
-                      padding: '8px 10px',
-                      background: '#F1F5F9',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      color: isTaxBill ? '#4B4DFF' : '#64748B'
-                    }}>
+                  <div className="gst-type-box">
+                    <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block', fontWeight: '600' }}>GST Type</label>
+                    <div className="gst-type-badge">
                       {isTaxBill ? 'GST Tax Invoice (18%)' : 'Non-GST Estimate'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Direct Customer Name, Mobile, Address inputs (Exact reference match) */}
-              <div>
+              {/* Direct Customer Name, Mobile, Address inputs */}
+              <div className="billing-col customer-details-col">
                 <div style={{ fontSize: '13px', fontWeight: '700', color: '#4B4DFF', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Client / Receiver Details
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div className="customer-inputs-grid">
                   <div>
-                    <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px' }}>Name *</label>
+                    <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Name *</label>
                     <input
                       type="text"
+                      className="customer-field-input"
                       placeholder="Customer name"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
-                        fontSize: '13px'
-                      }}
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px' }}>Mobile *</label>
+                    <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Mobile *</label>
                     <input
                       type="text"
+                      className="customer-field-input"
                       placeholder="10 digit mobile"
                       value={customerMobile}
                       onChange={(e) => setCustomerMobile(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
-                        fontSize: '13px'
-                      }}
                     />
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px' }}>Address</label>
+                  <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Address</label>
                   <input
                     type="text"
+                    className="customer-field-input"
                     placeholder="Delivery location / city / pincode"
                     value={customerAddress}
                     onChange={(e) => setCustomerAddress(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '13px'
-                    }}
                   />
                 </div>
               </div>
@@ -1913,7 +1869,7 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-      <div style={{
+      <div className="master-action-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -1973,14 +1929,14 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
         </div>
       </div>
 
-      <div style={{
+      <div className="product-table-wrapper" style={{
         background: '#FFFFFF',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
         overflow: 'hidden',
         boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+        <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
               <th style={{ padding: '14px 16px', width: '60px' }}>#</th>
@@ -2032,9 +1988,10 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          padding: '16px'
         }}>
-          <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '24px', width: '420px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '24px', width: '420px', maxWidth: '100%', boxSizing: 'border-box' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px' }}>Add Customer Profile</h3>
             <form onSubmit={handleAddCustomer} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
@@ -2103,17 +2060,39 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
       </div>
 
       {/* History Table */}
-      <div style={{
+      <div className="product-table-wrapper" style={{
         background: '#FFFFFF',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
         overflow: 'hidden',
         boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
       }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', fontWeight: '800', fontSize: '15px' }}>
-          Recent Invoices & Quotations History
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', fontWeight: '800', fontSize: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <span>Recent Invoices & Quotations History</span>
+          {savedInvoices.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm('Clear all saved invoices history and reset bill number to 1?')) {
+                  setSavedInvoices([]);
+                  showToast('All invoices cleared. Bill counter reset to #1.');
+                }
+              }}
+              style={{
+                background: '#FEE2E2',
+                color: '#DC2626',
+                border: '1px solid #FCA5A5',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer'
+              }}
+            >
+              Clear All & Start from #1
+            </button>
+          )}
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+        <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
               <th style={{ padding: '14px 16px', width: '80px', textAlign: 'center' }}>Bill No</th>
