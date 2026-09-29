@@ -1471,9 +1471,7 @@ export default function App() {
 
         {/* Center: Developed by Genz Neural-x */}
         <div className="app-footer-center">
-          <span className="app-footer-badge">
-            <span style={{ color: '#F59E0B' }}>⚡</span> Developed by <strong style={{ color: '#38BDF8', fontWeight: '800' }}>Genz Neural-x</strong>
-          </span>
+          <span>Developed by <b>Genz Neural-x</b></span>
         </div>
 
         {/* Right: GSTIN & Contact */}
