@@ -129,7 +129,7 @@ export const generatePdfDocument = (billData, company) => {
   // Meta: Invoice No / Date / Time
   const metaX = pw - rm - 62;
   const nowTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  const metas = [['Invoice No', `INV-${billData.billNo}`], ['Date', billData.date], ['Time', nowTime]];
+  const metas = [['Invoice No', `SKC ${billData.billNo}`], ['Date', billData.date], ['Time', nowTime]];
   metas.forEach(([label, val], i) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);

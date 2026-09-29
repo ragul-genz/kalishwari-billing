@@ -389,7 +389,7 @@ export default function App() {
       ? Math.max(...savedInvoices.map(inv => Number(inv.billNo) || 0)) + 1
       : 1;
     setBillNo(nextNo);
-    showToast(`New Bill #${nextNo} Ready`);
+    showToast(`New Bill #SKC ${nextNo} Ready`);
   };
 
   // Save / Print Bill
@@ -433,14 +433,14 @@ export default function App() {
       origin: { y: 0.6 }
     });
 
-    showToast(`Bill #${billNo} Saved Successfully!`);
+    showToast(`Bill #SKC ${billNo} Saved Successfully!`);
 
     if (shouldPrint) {
       // Show invoice preview drawer on the left
       setPreviewInvoice(newInvoice);
       // Also auto-download the PDF immediately
       const doc = generatePdfDocument(newInvoice, company);
-      doc.save(`Sri_Kaliswari_Bill_${billNo}_${customerName || 'Customer'}.pdf`);
+      doc.save(`Sri_Kaliswari_Bill_SKC_${billNo}_${customerName || 'Customer'}.pdf`);
     }
 
     // Auto-clear form for next bill and auto-advance to next sequential bill number
@@ -711,7 +711,28 @@ export default function App() {
               <div className="qb-status-group">
                 <div className="qb-status-item">
                   <span className="qb-label">BILL NO:</span>
-                  <span className="qb-val-highlight">INV-{billNo}</span>
+                  <span className="qb-val-highlight" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <span>SKC</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={billNo}
+                      onChange={(e) => setBillNo(e.target.value)}
+                      style={{
+                        width: '54px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: '1px dashed #EA580C',
+                        color: '#EA580C',
+                        fontWeight: '800',
+                        fontSize: '13px',
+                        textAlign: 'center',
+                        outline: 'none',
+                        padding: '0 2px'
+                      }}
+                      title="Bill Number (Click to edit)"
+                    />
+                  </span>
                 </div>
                 <div className="qb-status-item">
                   <span className="qb-label">FORMAT:</span>
@@ -1498,7 +1519,7 @@ export default function App() {
                   🧾 Invoice Preview
                 </div>
                 <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', marginTop: '2px' }}>
-                  Bill #{previewInvoice.billNo} · {previewInvoice.type === 'tax' ? 'GST Tax Bill' : 'Estimate'}
+                  Bill #SKC {previewInvoice.billNo} · {previewInvoice.type === 'tax' ? 'GST Tax Bill' : 'Estimate'}
                 </div>
               </div>
               <button
@@ -1543,7 +1564,7 @@ export default function App() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
                 <div style={{ background: '#F1F5F9', borderRadius: '10px', padding: '12px 14px' }}>
                   <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Bill No</div>
-                  <div style={{ fontWeight: '800', fontSize: '20px', color: '#4B4DFF' }}>#{previewInvoice.billNo}</div>
+                  <div style={{ fontWeight: '800', fontSize: '20px', color: '#EA580C' }}>SKC {previewInvoice.billNo}</div>
                 </div>
                 <div style={{ background: '#F1F5F9', borderRadius: '10px', padding: '12px 14px' }}>
                   <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Date</div>
@@ -1662,7 +1683,7 @@ export default function App() {
               <button
                 onClick={() => {
                   const doc = generatePdfDocument(previewInvoice, company);
-                  doc.save(`Sri_Kaliswari_Bill_${previewInvoice.billNo}_${previewInvoice.customerName}.pdf`);
+                  doc.save(`Sri_Kaliswari_Bill_SKC_${previewInvoice.billNo}_${previewInvoice.customerName}.pdf`);
                 }}
                 style={{
                   flex: 1,
@@ -2306,8 +2327,8 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
           <tbody>
             {savedInvoices.map((inv) => (
               <tr key={inv.billNo} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#4B4DFF' }}>
-                  #{inv.billNo}
+                <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#EA580C' }}>
+                  SKC {inv.billNo}
                 </td>
                 <td style={{ padding: '12px 16px', color: '#64748B' }}>{inv.date}</td>
                 <td style={{ padding: '12px 16px' }}>
