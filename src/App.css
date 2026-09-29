@@ -2,7 +2,6 @@
    SRI KALISWARI CRACKERS — PREMIUM LOGIN PAGE STYLES
    ============================================================ */
 
-/* Animated gradient background */
 @keyframes gradientShift {
   0%   { background-position: 0% 50%; }
   50%  { background-position: 100% 50%; }
@@ -94,7 +93,6 @@
   overflow: hidden;
 }
 
-/* Rainbow shimmer top bar */
 .login-card::before {
   content: '';
   position: absolute;
@@ -139,7 +137,6 @@
   text-transform: uppercase;
 }
 
-/* ── FORM AREA ──────────────────────────────────────────── */
 .login-form {
   display: flex;
   flex-direction: column;
@@ -147,7 +144,6 @@
   padding: 2rem 2.2rem 0.5rem;
 }
 
-/* ── FIELD ──────────────────────────────────────────────── */
 .login-field {
   display: flex;
   flex-direction: column;
@@ -180,7 +176,6 @@
   box-shadow: 0 2px 8px rgba(109,61,255,0.5);
 }
 
-/* ── INPUT ──────────────────────────────────────────────── */
 .login-input {
   width: 100%;
   padding: 0.88rem 1.1rem;
@@ -195,10 +190,7 @@
   caret-color: #6D3DFF;
 }
 
-.login-input::placeholder {
-  color: rgba(255,255,255,0.28);
-  font-weight: 400;
-}
+.login-input::placeholder { color: rgba(255,255,255,0.28); font-weight: 400; }
 
 .login-input:focus {
   background: rgba(255,255,255,0.13);
@@ -207,14 +199,8 @@
   transform: translateY(-1px);
 }
 
-/* ── YEAR HINT ──────────────────────────────────────────── */
-.login-year-hint {
-  font-size: 0.74rem;
-  color: rgba(255,255,255,0.35);
-  padding-left: 0.2rem;
-}
+.login-year-hint { font-size: 0.74rem; color: rgba(255,255,255,0.35); padding-left: 0.2rem; }
 
-/* ── YEAR MISSING PROMPT ────────────────────────────────── */
 .login-year-missing {
   background: rgba(245,158,11,0.1);
   border: 1px solid rgba(245,158,11,0.3);
@@ -225,18 +211,9 @@
   gap: 0.55rem;
 }
 
-.login-year-missing-text {
-  color: #FCD34D;
-  font-size: 0.87rem;
-  font-weight: 600;
-}
+.login-year-missing-text { color: #FCD34D; font-size: 0.87rem; font-weight: 600; }
+.login-year-missing-sub { color: rgba(255,255,255,0.5); font-size: 0.78rem; }
 
-.login-year-missing-sub {
-  color: rgba(255,255,255,0.5);
-  font-size: 0.78rem;
-}
-
-/* ── BUTTONS ────────────────────────────────────────────── */
 .login-button {
   width: 100%;
   margin-top: 0.4rem;
@@ -265,38 +242,14 @@
 }
 
 .login-button:hover::after { left: 100%; }
+.login-button:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(109,61,255,0.55), 0 1px 0 rgba(255,255,255,0.2) inset; }
+.login-button:active { transform: translateY(0) scale(0.97); }
 
-.login-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 32px rgba(109,61,255,0.55), 0 1px 0 rgba(255,255,255,0.2) inset;
-}
+.login-btn-create { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); box-shadow: 0 6px 18px rgba(245,158,11,0.35); }
+.login-btn-create:hover { box-shadow: 0 10px 24px rgba(245,158,11,0.5); }
+.login-btn-cancel { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13); box-shadow: none; margin-top: 0.25rem; }
+.login-btn-cancel:hover { background: rgba(255,255,255,0.12); box-shadow: none; }
 
-.login-button:active {
-  transform: translateY(0) scale(0.97);
-}
-
-.login-btn-create {
-  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
-  box-shadow: 0 6px 18px rgba(245,158,11,0.35);
-}
-
-.login-btn-create:hover {
-  box-shadow: 0 10px 24px rgba(245,158,11,0.5);
-}
-
-.login-btn-cancel {
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.13);
-  box-shadow: none;
-  margin-top: 0.25rem;
-}
-
-.login-btn-cancel:hover {
-  background: rgba(255,255,255,0.12);
-  box-shadow: none;
-}
-
-/* ── ERROR ──────────────────────────────────────────────── */
 .login-error {
   color: #FCA5A5;
   font-size: 0.85rem;
@@ -309,7 +262,6 @@
   text-align: center;
 }
 
-/* ── FOOTER ─────────────────────────────────────────────── */
 .login-footer {
   text-align: center;
   color: rgba(255,255,255,0.25);
@@ -318,3 +270,302 @@
   letter-spacing: 0.5px;
 }
 
+
+/* ============================================================
+   MOBILE RESPONSIVE — MAIN APP LAYOUT
+   ============================================================ */
+
+/* ── APP HEADER ─────────────────────────────────────────── */
+.app-header {
+  background: linear-gradient(135deg, #4B4DFF 0%, #6D3DFF 100%);
+  color: #FFFFFF;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(75,77,255,0.25);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  gap: 12px;
+}
+
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-header-logo {
+  width: 44px; height: 44px; min-width: 44px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.app-header-text { min-width: 0; }
+
+.app-header-title-row {
+  display: flex; align-items: center; gap: 10px;
+}
+
+.app-header-title {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.app-header-badge {
+  background: rgba(255,255,255,0.25);
+  font-size: 11px; padding: 2px 8px;
+  border-radius: 20px; font-weight: 600; white-space: nowrap;
+}
+
+.app-header-subtitle {
+  font-size: 12px; opacity: 0.9; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.app-header-right {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+
+.app-date-pill {
+  background: rgba(255,255,255,0.15);
+  padding: 6px 14px; border-radius: 20px;
+  font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.app-new-bill-btn {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #FFF; padding: 7px 14px; border-radius: 10px;
+  cursor: pointer; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+  transition: all 0.2s ease;
+}
+
+/* ── NAV ────────────────────────────────────────────────── */
+.app-nav {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 0 28px;
+  display: flex; align-items: center; gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.app-nav::-webkit-scrollbar { display: none; }
+
+.app-nav-tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 18px;
+  border: none; background: transparent;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap; flex-shrink: 0;
+}
+
+/* ── MAIN ───────────────────────────────────────────────── */
+.app-main {
+  padding: 24px 28px;
+  flex: 1; max-width: 1600px; margin: 0 auto; width: 100%;
+}
+
+/* ── BILLING LAYOUTS ────────────────────────────────────── */
+.billing-top-row {
+  background: #FFFFFF; border-radius: 16px; padding: 20px 24px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0;
+  display: grid; grid-template-columns: 1.2fr 2fr 2fr; gap: 24px;
+}
+
+.product-add-bar {
+  background: #FFFFFF; border-radius: 16px; padding: 16px 24px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0;
+  display: flex; align-items: center; gap: 16px;
+}
+
+.billing-split-view {
+  display: grid; grid-template-columns: 1fr 380px; gap: 24px;
+}
+
+.calc-panel {
+  background: #FFFFFF; border-radius: 16px; padding: 24px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #E2E8F0;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* ── FOOTER ─────────────────────────────────────────────── */
+.app-footer {
+  background: #FFFFFF; border-top: 1px solid #E2E8F0;
+  padding: 16px 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; color: #64748B; margin-top: auto;
+}
+
+/* ── TOAST ──────────────────────────────────────────────── */
+.app-toast {
+  position: fixed; top: 20px; right: 24px; z-index: 9999;
+  background: #0F172A; color: #FFF;
+  padding: 14px 24px; border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 500; font-size: 14px;
+  animation: fadeIn 0.3s ease; max-width: calc(100vw - 40px);
+}
+
+/* ── MOBILE BOTTOM NAV ──────────────────────────────────── */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: #FFFFFF; border-top: 1px solid #E2E8F0;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-bottom-nav-inner {
+  display: flex; justify-content: space-around; align-items: center;
+}
+
+.mobile-nav-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px; border: none; background: transparent;
+  cursor: pointer; flex: 1; transition: all 0.15s;
+}
+
+.mobile-nav-btn .mob-label {
+  font-size: 10px; font-weight: 600;
+}
+
+
+/* ============================================================
+   TABLET  (max-width: 1024px)
+   ============================================================ */
+@media (max-width: 1024px) {
+  .app-main { padding: 16px 18px; }
+
+  .billing-top-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .billing-top-row > div:last-child { grid-column: 1 / -1; }
+
+  .billing-split-view {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .calc-panel { order: -1; }
+}
+
+
+/* ============================================================
+   MOBILE  (max-width: 768px)
+   ============================================================ */
+@media (max-width: 768px) {
+
+  /* Header shrink */
+  .app-header { padding: 10px 14px; gap: 8px; }
+  .app-header-logo { width: 36px; height: 36px; min-width: 36px; border-radius: 10px; }
+  .app-header-title { font-size: 14px; max-width: 150px; }
+  .app-header-badge { display: none; }
+  .app-header-subtitle { display: none; }
+  .app-date-pill { display: none; }
+  .app-new-bill-btn-label { display: none; }
+  .app-new-bill-btn { padding: 7px 10px; }
+
+  /* Hide desktop nav, show bottom nav */
+  .app-nav { display: none; }
+  .mobile-bottom-nav { display: block; }
+
+  /* Main — bottom padding for bottom nav */
+  .app-main { padding: 12px 12px 76px 12px; }
+
+  /* Billing top row — full stack */
+  .billing-top-row {
+    grid-template-columns: 1fr;
+    gap: 0; padding: 14px 14px;
+  }
+  .billing-top-row > div:not(:last-child) {
+    border-right: none !important;
+    padding-right: 0 !important;
+    border-bottom: 1px solid #F1F5F9;
+    padding-bottom: 14px !important;
+    margin-bottom: 14px;
+  }
+  .billing-top-row > div:last-child { border-right: none !important; padding-right: 0 !important; }
+
+  /* Product add bar — stacked */
+  .product-add-bar {
+    flex-direction: column; align-items: stretch;
+    padding: 12px 14px; gap: 10px;
+  }
+  .product-add-bar .pab-code { width: 100%; }
+  .product-add-bar .pab-select { width: 100%; }
+  .product-add-bar .pab-qty { width: 100%; }
+  .product-add-bar .pab-btn { width: 100%; }
+  .product-add-bar .pab-btn button { width: 100% !important; justify-content: center !important; padding: 12px !important; }
+
+  /* Billing split — single column, calc first */
+  .billing-split-view { grid-template-columns: 1fr; gap: 14px; }
+  .calc-panel { order: -1; padding: 14px; }
+
+  /* Table scroll */
+  .product-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Footer stack */
+  .app-footer {
+    flex-direction: column; gap: 6px; text-align: center;
+    padding: 12px 14px 16px;
+  }
+
+  /* Toast move up from bottom nav */
+  .app-toast {
+    top: auto; bottom: 76px;
+    left: 12px; right: 12px;
+    border-radius: 12px; font-size: 13px;
+  }
+
+  /* Reports metric grid */
+  .reports-metric-grid { grid-template-columns: 1fr !important; }
+
+  /* Master header */
+  .master-action-header {
+    flex-direction: column !important; align-items: flex-start !important; gap: 12px !important;
+  }
+  .master-action-header button { width: 100%; justify-content: center; }
+
+  /* Settings grids */
+  .settings-2col { grid-template-columns: 1fr !important; }
+  .settings-3col { grid-template-columns: 1fr !important; }
+
+  /* Drawer — full width */
+  .invoice-drawer { width: 100vw !important; max-width: 100vw !important; }
+
+  /* Bill info grid */
+  .bill-no-row { grid-template-columns: 60px 1fr !important; }
+  .bill-date-row { grid-template-columns: 60px 1fr !important; }
+}
+
+
+/* ============================================================
+   SMALL  (max-width: 480px)
+   ============================================================ */
+@media (max-width: 480px) {
+  .app-header-title { font-size: 13px; }
+  .net-amount-value { font-size: 22px !important; }
+  .mobile-nav-btn .mob-label { font-size: 9px; }
+  .calc-panel { padding: 12px; }
+}
+
+
+/* Print */
+@media print {
+  body { background: #FFF !important; color: #000 !important; padding: 0 !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .print-sheet { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }
+}
+
+.print-only { display: none; }

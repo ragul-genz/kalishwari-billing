@@ -19,6 +19,7 @@ import {
   Building2,
   RefreshCw,
   Eye,
+  EyeOff,
   Edit,
   ArrowRight,
   Folder,
@@ -37,10 +38,11 @@ export default function App() {
   const [loginYear, setLoginYear] = React.useState('');
   const [activeYear, setActiveYear] = React.useState('');
   const [yearMissingPrompt, setYearMissingPrompt] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (loginEmail === 'kalishwari@crakers.billing.123' && loginPassword === 'kalishwari@1452') {
+    if (loginEmail === 'Billing@admin.com' && loginPassword === 'Billing@123') {
       if (!loginYear) {
         setLoginError('Please enter a year.');
         return;
@@ -395,16 +397,43 @@ export default function App() {
               <label className="login-label" htmlFor="loginPassword">
                 <span className="login-field-num">2</span> Password
               </label>
-              <input
-                id="loginPassword"
-                type="password"
-                placeholder="Enter your password"
-                value={loginPassword}
-                onChange={e => setLoginPassword(e.target.value)}
-                className="login-input"
-                autoComplete="current-password"
-                required
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="loginPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  className="login-input"
+                  autoComplete="current-password"
+                  style={{ paddingRight: '48px' }}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  style={{
+                    position: 'absolute',
+                    right: '14px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'rgba(255,255,255,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.9)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {/* 3. Financial Year */}
@@ -458,122 +487,40 @@ export default function App() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '24px',
-          zIndex: 9999,
-          background: '#0F172A',
-          color: '#FFF',
-          padding: '14px 24px',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontWeight: '500',
-          fontSize: '14px',
-          animation: 'fadeIn 0.3s ease'
-        }}>
+        <div className="app-toast">
           <CheckCircle size={18} color="#10B981" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Top Banner & Header */}
-      <header style={{
-        background: 'linear-gradient(135deg, #4B4DFF 0%, #6D3DFF 100%)',
-        color: '#FFFFFF',
-        padding: '14px 28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        boxShadow: '0 4px 20px rgba(75, 77, 255, 0.25)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '12px',
-            background: 'rgba(255, 255, 255, 0.2)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px solid rgba(255, 255, 255, 0.3)'
-          }}>
+      <header className="app-header">
+        <div className="app-header-left">
+          <div className="app-header-logo">
             <Sparkles size={24} color="#FFF" />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>
-                {company.name}
-              </h1>
-              <span style={{
-                background: 'rgba(255, 255, 255, 0.25)',
-                fontSize: '11px',
-                padding: '2px 8px',
-                borderRadius: '20px',
-                fontWeight: '600'
-              }}>
-                Sivakasi POS 2026
-              </span>
+          <div className="app-header-text">
+            <div className="app-header-title-row">
+              <h1 className="app-header-title">{company.name}</h1>
+              <span className="app-header-badge">Sivakasi POS 2026</span>
             </div>
-            <p style={{ fontSize: '12px', opacity: 0.9, marginTop: '2px' }}>
-              {company.tagline} | Fast Billing & Estimate Suite
-            </p>
+            <p className="app-header-subtitle">{company.tagline} | Fast Billing & Estimate Suite</p>
           </div>
         </div>
-
-        {/* Action Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.15)',
-            padding: '6px 14px',
-            borderRadius: '20px',
-            fontSize: '13px',
-            fontWeight: '600',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
+        <div className="app-header-right">
+          <div className="app-date-pill">
             <Clock size={15} />
             <span>{billDate}</span>
           </div>
-          <button
-            onClick={() => handleResetBill()}
-            style={{
-              background: 'rgba(255, 255, 255, 0.2)',
-              border: '1px solid rgba(255, 255, 255, 0.4)',
-              color: '#FFF',
-              padding: '7px 14px',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '600',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.2s ease'
-            }}>
-            <RefreshCw size={14} /> New Bill
+          <button onClick={() => handleResetBill()} className="app-new-bill-btn">
+            <RefreshCw size={14} />
+            <span className="app-new-bill-btn-label">New Bill</span>
           </button>
         </div>
       </header>
 
-      {/* Navigation Menu Tabs (Matching Reference UI: Settings, Customer, Product Master, Purchase, Tax Bill, Quotation, Estimate, Reports) */}
-      <nav style={{
-        background: '#FFFFFF',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '0 28px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        overflowX: 'auto'
-      }}>
+      {/* Desktop Navigation Tabs */}
+      <nav className="app-nav">
         {[
           { id: 'estimate', label: 'Estimate / Quote', icon: FileSpreadsheet },
           { id: 'taxbill', label: 'Tax Bill (GST)', icon: Receipt },
@@ -581,7 +528,6 @@ export default function App() {
           { id: 'customers', label: 'Customer', icon: Users },
           { id: 'reports', label: 'Reports & History', icon: TrendingUp },
           { id: 'settings', label: 'Settings', icon: Settings },
-          { id: 'login', label: 'Login', icon: Users }
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -589,20 +535,12 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              className="app-nav-tab"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '14px 18px',
-                border: 'none',
-                background: 'transparent',
                 borderBottom: isActive ? '3px solid #4B4DFF' : '3px solid transparent',
                 color: isActive ? '#4B4DFF' : '#64748B',
                 fontWeight: isActive ? '700' : '500',
                 fontSize: '14px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
               }}
             >
               <Icon size={17} color={isActive ? '#4B4DFF' : '#64748B'} />
@@ -612,24 +550,43 @@ export default function App() {
         })}
       </nav>
 
+      {/* Mobile Bottom Navigation */}
+      <div className="mobile-bottom-nav">
+        <div className="mobile-bottom-nav-inner">
+          {[
+            { id: 'estimate', label: 'Estimate', icon: FileSpreadsheet },
+            { id: 'taxbill', label: 'Tax Bill', icon: Receipt },
+            { id: 'products', label: 'Products', icon: Package },
+            { id: 'customers', label: 'Customers', icon: Users },
+            { id: 'reports', label: 'Reports', icon: TrendingUp },
+            { id: 'settings', label: 'Settings', icon: Settings },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                className="mobile-nav-btn"
+                onClick={() => setActiveTab(tab.id)}
+                style={{ color: isActive ? '#4B4DFF' : '#94A3B8' }}
+              >
+                <Icon size={20} color={isActive ? '#4B4DFF' : '#94A3B8'} />
+                <span className="mob-label" style={{ color: isActive ? '#4B4DFF' : '#94A3B8' }}>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Main Workspace Content */}
-      <main style={{ padding: '24px 28px', flex: 1, maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
+      <main className="app-main">
 
         {/* VIEW 1: BILLING ENGINE (Estimate, Tax Bill) */}
         {(activeTab === 'estimate' || activeTab === 'taxbill') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
             {/* Top Config Row: Bill No, Date, Customer Selector & New Customer Box */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '16px',
-              padding: '20px 24px',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-              border: '1px solid #E2E8F0',
-              display: 'grid',
-              gridTemplateColumns: '1.2fr 2fr 2fr',
-              gap: '24px'
-            }}>
+            <div className="billing-top-row">
 
               {/* Bill Details */}
               <div style={{ borderRight: '1px solid #F1F5F9', paddingRight: '20px' }}>
@@ -830,17 +787,8 @@ export default function App() {
             </div>
 
             {/* Product Quick-Add Bar (Code, Product Name Search/Dropdown, Qty, Add Button) */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '16px',
-              padding: '16px 24px',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-              border: '1px solid #E2E8F0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px'
-            }}>
-              <div style={{ width: '130px' }}>
+            <div className="product-add-bar">
+              <div className="pab-code" style={{ width: '130px' }}>
                 <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                   Code
                 </label>
@@ -862,7 +810,7 @@ export default function App() {
                 />
               </div>
 
-              <div style={{ flex: 1 }}>
+              <div className="pab-select" style={{ flex: 1 }}>
                 <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                   Select Cracker Product
                 </label>
@@ -888,7 +836,7 @@ export default function App() {
                 </select>
               </div>
 
-              <div style={{ width: '110px' }}>
+              <div className="pab-qty" style={{ width: '110px' }}>
                 <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                   Qty
                 </label>
@@ -910,7 +858,7 @@ export default function App() {
                 />
               </div>
 
-              <div style={{ alignSelf: 'flex-end' }}>
+              <div className="pab-btn" style={{ alignSelf: 'flex-end' }}>
                 <button
                   onClick={handleAddItem}
                   style={{
@@ -934,7 +882,7 @@ export default function App() {
             </div>
 
             {/* Split Screen: Items Table (Left) & Real-time Calculation Panel (Right) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '24px' }}>
+            <div className="billing-split-view">
 
               {/* Product Table */}
               <div style={{
@@ -1102,16 +1050,7 @@ export default function App() {
               </div>
 
               {/* Right Side: Exact Reference Amount Info Calculation Panel */}
-              <div style={{
-                background: '#FFFFFF',
-                borderRadius: '16px',
-                padding: '24px',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px'
-              }}>
+              <div className="calc-panel">
                 <div style={{ fontSize: '15px', fontWeight: '800', color: '#1E293B', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
                   Amount Info & Calculations
                 </div>
@@ -1236,7 +1175,7 @@ export default function App() {
                   <div style={{ fontSize: '12px', opacity: 0.9, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Net Final Amount (Rs.)
                   </div>
-                  <div style={{ fontSize: '28px', fontWeight: '800', marginTop: '4px' }}>
+                  <div className="net-amount-value" style={{ fontSize: '28px', fontWeight: '800', marginTop: '4px' }}>
                     ₹ {formatNumber(netAmount)}
                   </div>
                   <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
@@ -1349,17 +1288,7 @@ export default function App() {
       </main>
 
       {/* Modern Sivakasi Crackers Footer */}
-      <footer style={{
-        background: '#FFFFFF',
-        borderTop: '1px solid #E2E8F0',
-        padding: '16px 28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        fontSize: '13px',
-        color: '#64748B',
-        marginTop: 'auto'
-      }}>
+      <footer className="app-footer">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Building2 size={16} color="#4B4DFF" />
           <span><b>{company.name}</b> - {company.address}</span>
@@ -1386,7 +1315,7 @@ export default function App() {
           />
 
           {/* Drawer Panel */}
-          <div style={{
+          <div className="invoice-drawer" style={{
             position: 'fixed',
             top: 0, left: 0,
             width: '480px',
@@ -2156,7 +2085,7 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
       {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+      <div className="reports-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
         <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Total Invoices Generated</div>
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#4B4DFF', marginTop: '6px' }}>{savedInvoices.length}</div>
@@ -2317,7 +2246,7 @@ function SettingsView({ company, setCompany, showToast }) {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+        <div className="settings-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
           <div>
             <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Phone / Mobile Contacts</label>
             <input
@@ -2338,7 +2267,7 @@ function SettingsView({ company, setCompany, showToast }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+        <div className="settings-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
           <div>
             <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Bank Name</label>
             <input
