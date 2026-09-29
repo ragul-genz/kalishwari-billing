@@ -711,28 +711,7 @@ export default function App() {
               <div className="qb-status-group">
                 <div className="qb-status-item">
                   <span className="qb-label">BILL NO:</span>
-                  <span className="qb-val-highlight" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                    <span>SKC</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={billNo}
-                      onChange={(e) => setBillNo(e.target.value)}
-                      style={{
-                        width: '54px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: '1px dashed #EA580C',
-                        color: '#EA580C',
-                        fontWeight: '800',
-                        fontSize: '13px',
-                        textAlign: 'center',
-                        outline: 'none',
-                        padding: '0 2px'
-                      }}
-                      title="Bill Number (Click to edit)"
-                    />
-                  </span>
+                  <span className="qb-val-highlight">SKC {billNo}</span>
                 </div>
                 <div className="qb-status-item">
                   <span className="qb-label">FORMAT:</span>
@@ -840,6 +819,41 @@ export default function App() {
               </div>
 
               <div className="qb-customer-meta-grid">
+                <div className="qb-field-group">
+                  <label className="qb-field-label">Bill Number</label>
+                  <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: '8px', overflow: 'hidden', border: '1px solid #CBD5E1', background: '#FFF' }}>
+                    <span style={{
+                      background: '#FFEDD5',
+                      color: '#C2410C',
+                      fontWeight: '800',
+                      fontSize: '13px',
+                      padding: '9px 12px',
+                      borderRight: '1px solid #FDBA74',
+                      display: 'flex',
+                      alignItems: 'center',
+                      userSelect: 'none'
+                    }}>
+                      SKC
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={billNo}
+                      onChange={(e) => setBillNo(e.target.value)}
+                      className="qb-input"
+                      style={{
+                        border: 'none',
+                        borderRadius: 0,
+                        fontWeight: '800',
+                        color: '#0F172A',
+                        fontSize: '14px',
+                        padding: '9px 12px'
+                      }}
+                      placeholder="1"
+                    />
+                  </div>
+                </div>
+
                 <div className="qb-field-group">
                   <label className="qb-field-label">Despatch / Bill Date</label>
                   <input
