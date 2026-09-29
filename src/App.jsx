@@ -23,6 +23,10 @@ import {
   Edit,
   ArrowRight,
   Folder,
+  User,
+  CreditCard,
+  Tag,
+  Calendar,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
@@ -150,12 +154,17 @@ export default function App() {
   const [billNo, setBillNo] = React.useState(1);
   const [billDate, setBillDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [priceMap, setPriceMap] = React.useState('Retail sales');
+  const [docFormat, setDocFormat] = React.useState('INVOICE');
+  const [paymentMode, setPaymentMode] = React.useState('Cash');
+  const [selectedCategory, setSelectedCategory] = React.useState('All');
+  const [currentTime, setCurrentTime] = React.useState(new Date().toLocaleTimeString());
 
   // Customer selection / input
   const [selectedCustomerId, setSelectedCustomerId] = React.useState('');
   const [customerName, setCustomerName] = React.useState('');
   const [customerMobile, setCustomerMobile] = React.useState('');
   const [customerAddress, setCustomerAddress] = React.useState('');
+  const [customerGstin, setCustomerGstin] = React.useState('');
 
   // Item adding row
   const [selectedProductCode, setSelectedProductCode] = React.useState('');
@@ -177,6 +186,17 @@ export default function App() {
   const [toastMessage, setToastMessage] = React.useState('');
   const [previewInvoice, setPreviewInvoice] = React.useState(null); // invoice side drawer
 
+  const customerNameRef = React.useRef(null);
+  const productSearchRef = React.useRef(null);
+
+  // Live timer for Status Bar
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3500);
@@ -189,6 +209,7 @@ export default function App() {
       setCustomerName('');
       setCustomerMobile('');
       setCustomerAddress('');
+      setCustomerGstin('');
       return;
     }
     const found = customers.find(c => String(c.id) === String(id));
@@ -196,6 +217,7 @@ export default function App() {
       setCustomerName(found.name);
       setCustomerMobile(found.mobile);
       setCustomerAddress(found.address);
+      setCustomerGstin(found.gstin || '');
     }
   };
 
@@ -218,6 +240,31 @@ export default function App() {
     } else {
       setSelectedProductCode('');
     }
+  };
+
+  // One-click quick add product to cart/bill
+  const handleQuickAddProduct = (prod, qtyToAdd = 1) => {
+    const q = Number(qtyToAdd) || 1;
+    const existingIndex = billItems.findIndex(i => i.id === prod.id);
+    if (existingIndex > -1) {
+      const updated = [...billItems];
+      updated[existingIndex].qty += q;
+      setBillItems(updated);
+    } else {
+      setBillItems([
+        ...billItems,
+        {
+          id: prod.id,
+          code: prod.code,
+          name: prod.name,
+          category: prod.category,
+          content: prod.content,
+          qty: q,
+          rate: Number(prod.rate)
+        }
+      ]);
+    }
+    showToast(`Added: ${prod.name}`);
   };
 
   const handleAddItem = (e) => {
@@ -281,10 +328,46 @@ export default function App() {
 
   const packingCharge = Math.round((afterAdditionalDisc * (Number(packingPercent) || 0)) / 100);
 
-  const isTaxBill = activeTab === 'taxbill';
+  const isTaxBill = docFormat === 'INVOICE' || activeTab === 'taxbill';
   const gstAmount = isTaxBill ? Math.round((afterAdditionalDisc * (Number(gstPercent) || 0)) / 100) : 0;
 
   const netAmount = afterAdditionalDisc + packingCharge + gstAmount;
+  const totalCases = billItems.reduce((acc, curr) => acc + (Number(curr.qty) || 0), 0);
+
+  // Filtered Products for the Quick Selection Shelf
+  const filteredProducts = React.useMemo(() => {
+    return products.filter(p => {
+      const matchCat = selectedCategory === 'All' || p.category === selectedCategory;
+      const searchLower = productSearch.trim().toLowerCase();
+      const matchSearch = !searchLower ||
+        p.name.toLowerCase().includes(searchLower) ||
+        String(p.code).toLowerCase() === searchLower ||
+        String(p.code).toLowerCase().includes(searchLower) ||
+        (p.category && p.category.toLowerCase().includes(searchLower));
+      return matchCat && matchSearch;
+    });
+  }, [products, selectedCategory, productSearch]);
+
+  // Keyboard Shortcuts: F2 (New Bill), F3 (Customer), F4 (Product Search), F5 (Save & Print)
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        handleResetBill();
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        customerNameRef.current?.focus();
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        productSearchRef.current?.focus();
+      } else if (e.key === 'F5') {
+        e.preventDefault();
+        handleSaveAndPrint(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [billItems, billNo, customerName, customerMobile, customerAddress, customerGstin, billDate, grossTotal, discountPercent, netAmount, docFormat, paymentMode]);
 
   // Reset current bill
   const handleResetBill = () => {
@@ -293,8 +376,10 @@ export default function App() {
     setCustomerName('');
     setCustomerMobile('');
     setCustomerAddress('');
+    setCustomerGstin('');
     setSelectedProductCode('');
     setSelectedProductId('');
+    setProductSearch('');
     setItemQty(1);
     setDiscountPercent(0);
     setAdditionalDiscPercent(0);
@@ -314,15 +399,15 @@ export default function App() {
       return;
     }
 
-    const currentDocType = activeTab === 'taxbill' ? 'tax' : 'estimate';
-
     const newInvoice = {
       billNo,
-      type: currentDocType,
+      type: docFormat.toLowerCase(),
       date: billDate,
       customerName: customerName || 'Direct Counter Sale',
       customerMobile: customerMobile || '-',
       customerAddress: customerAddress || '-',
+      customerGstin: customerGstin || '-',
+      paymentMode,
       items: [...billItems],
       grossTotal,
       discountPercent,
@@ -364,6 +449,7 @@ export default function App() {
     setCustomerName('');
     setCustomerMobile('');
     setCustomerAddress('');
+    setCustomerGstin('');
     setSelectedProductCode('');
     setSelectedProductId('');
     setItemQty(1);
@@ -513,55 +599,72 @@ export default function App() {
       {/* Top Banner & Header */}
       <header className="app-header">
         <div className="app-header-left">
-          <div className="app-header-logo">
-            <Sparkles size={24} color="#FFF" />
+          <div className="app-header-logo" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #EA580C 100%)' }}>
+            <Sparkles size={22} color="#FFF" />
           </div>
           <div className="app-header-text">
             <div className="app-header-title-row">
               <h1 className="app-header-title">{company.name}</h1>
-              <span className="app-header-badge">Sivakasi POS 2026</span>
+              <span className="app-header-badge" style={{ background: '#FFEDD5', color: '#C2410C' }}>Sivakasi POS 2026</span>
             </div>
-            <p className="app-header-subtitle">{company.tagline} | Fast Billing & Estimate Suite</p>
+            <p className="app-header-subtitle">{company.tagline} • Direct Factory Outlet</p>
           </div>
         </div>
         <div className="app-header-right">
           <div className="app-date-pill">
             <Clock size={15} />
-            <span>{billDate}</span>
+            <span>{billDate} {currentTime}</span>
           </div>
-          <button onClick={() => handleResetBill()} className="app-new-bill-btn">
+          <button
+            onClick={() => handleResetBill()}
+            className="app-new-bill-btn"
+            style={{
+              background: '#FF6B35',
+              color: '#FFF',
+              border: 'none',
+              boxShadow: '0 4px 12px rgba(255,107,53,0.3)'
+            }}
+          >
             <RefreshCw size={14} />
-            <span className="app-new-bill-btn-label">New Bill</span>
+            <span className="app-new-bill-btn-label">+ New Bill (F2)</span>
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F1F5F9', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', color: '#475569' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
+            Admin
+          </div>
         </div>
       </header>
 
       {/* Desktop Navigation Tabs */}
       <nav className="app-nav">
         {[
-          { id: 'estimate', label: 'Estimate / Quote', icon: FileSpreadsheet },
-          { id: 'taxbill', label: 'Tax Bill (GST)', icon: Receipt },
-          { id: 'products', label: 'Product Master', icon: Package },
-          { id: 'customers', label: 'Customer', icon: Users },
-          { id: 'reports', label: 'Reports & History', icon: TrendingUp },
-          { id: 'settings', label: 'Settings', icon: Settings },
+          { id: 'estimate', label: 'Quick Billing', badge: 'F2', icon: FileSpreadsheet },
+          { id: 'products', label: 'Products Master', icon: Package },
+          { id: 'customers', label: 'Customers', icon: Users },
+          { id: 'reports', label: 'Sales History', icon: TrendingUp },
+          { id: 'settings', label: 'Shop Settings', icon: Settings },
         ].map(tab => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = activeTab === tab.id || (activeTab === 'taxbill' && tab.id === 'estimate');
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className="app-nav-tab"
               style={{
-                borderBottom: isActive ? '3px solid #4B4DFF' : '3px solid transparent',
-                color: isActive ? '#4B4DFF' : '#64748B',
+                borderBottom: isActive ? '3px solid #FF6B35' : '3px solid transparent',
+                color: isActive ? '#FF6B35' : '#64748B',
                 fontWeight: isActive ? '700' : '500',
                 fontSize: '14px',
               }}
             >
-              <Icon size={17} color={isActive ? '#4B4DFF' : '#64748B'} />
+              <Icon size={17} color={isActive ? '#FF6B35' : '#64748B'} />
               <span>{tab.label}</span>
+              {tab.badge && (
+                <span style={{ background: isActive ? '#FFEDD5' : '#F1F5F9', color: isActive ? '#C2410C' : '#94A3B8', fontSize: '10px', fontWeight: '800', padding: '1px 6px', borderRadius: '6px' }}>
+                  {tab.badge}
+                </span>
+              )}
             </button>
           );
         })}
@@ -571,24 +674,23 @@ export default function App() {
       <div className="mobile-bottom-nav">
         <div className="mobile-bottom-nav-inner">
           {[
-            { id: 'estimate', label: 'Estimate', icon: FileSpreadsheet },
-            { id: 'taxbill', label: 'Tax Bill', icon: Receipt },
+            { id: 'estimate', label: 'Billing', icon: FileSpreadsheet },
             { id: 'products', label: 'Products', icon: Package },
             { id: 'customers', label: 'Customers', icon: Users },
-            { id: 'reports', label: 'Reports', icon: TrendingUp },
+            { id: 'reports', label: 'History', icon: TrendingUp },
             { id: 'settings', label: 'Settings', icon: Settings },
           ].map(tab => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActive = activeTab === tab.id || (activeTab === 'taxbill' && tab.id === 'estimate');
             return (
               <button
                 key={tab.id}
                 className="mobile-nav-btn"
                 onClick={() => setActiveTab(tab.id)}
-                style={{ color: isActive ? '#4B4DFF' : '#94A3B8' }}
+                style={{ color: isActive ? '#FF6B35' : '#94A3B8' }}
               >
-                <Icon size={20} color={isActive ? '#4B4DFF' : '#94A3B8'} />
-                <span className="mob-label" style={{ color: isActive ? '#4B4DFF' : '#94A3B8' }}>{tab.label}</span>
+                <Icon size={20} color={isActive ? '#FF6B35' : '#94A3B8'} />
+                <span className="mob-label" style={{ color: isActive ? '#FF6B35' : '#94A3B8' }}>{tab.label}</span>
               </button>
             );
           })}
@@ -598,242 +700,302 @@ export default function App() {
       {/* Main Workspace Content */}
       <main className="app-main">
 
-        {/* VIEW 1: BILLING ENGINE (Estimate, Tax Bill) */}
-        {(activeTab === 'estimate' || activeTab === 'taxbill') && (
+        {/* VIEW 1: QUICK BILLING ENGINE (Matching Shri Gugan Crackers reference) */}
+        {(activeTab === 'estimate' || activeTab === 'taxbill' || activeTab === 'quickbilling') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-            {/* Top Config Row: Bill No, Date, Customer Selector & New Customer Box */}
-            <div className="billing-top-row">
-
-              {/* Bill Details */}
-              <div className="billing-col bill-info-col">
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#4B4DFF', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Bill Information
+            {/* 1. TOP STATUS BAR (Shortcuts & Bill Metadata) */}
+            <div className="qb-status-bar">
+              <div className="qb-status-group">
+                <div className="qb-status-item">
+                  <span className="qb-label">BILL NO:</span>
+                  <span className="qb-val-highlight">INV-{billNo}</span>
                 </div>
-                <div className="bill-field-row">
-                  <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Bill No:</label>
-                  <div style={{ display: 'flex', gap: '6px', flex: 1, minWidth: 0 }}>
-                    <input
-                      type="number"
-                      value={billNo}
-                      onChange={(e) => setBillNo(Number(e.target.value))}
-                      className="bill-no-input"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setBillNo(prev => prev + 1)}
-                      className="bill-inc-btn"
-                    >+</button>
-                    <button
-                      type="button"
-                      onClick={() => setBillNo(prev => Math.max(1, prev - 1))}
-                      className="bill-inc-btn"
-                    >-</button>
+                <div className="qb-status-item">
+                  <span className="qb-label">FORMAT:</span>
+                  <span className="qb-val">{docFormat === 'INVOICE' ? 'TAX INVOICE (GST 18%)' : (docFormat === 'ESTIMATE' ? 'ESTIMATE (Wholesale)' : 'QUOTATION')}</span>
+                </div>
+                <div className="qb-status-item">
+                  <span className="qb-label">DATE & TIME:</span>
+                  <span className="qb-val">{billDate} {currentTime}</span>
+                </div>
+              </div>
+              <div className="qb-status-keys">
+                <span className="qb-key-item"><span className="qb-key-badge">F2</span> New Bill</span>
+                <span className="qb-key-item"><span className="qb-key-badge">F3</span> Customer</span>
+                <span className="qb-key-item"><span className="qb-key-badge">F4</span> Product Search</span>
+                <span className="qb-key-item"><span className="qb-key-badge">F5</span> Save & Print</span>
+              </div>
+            </div>
+
+            {/* 2. CUSTOMER DETAILS (M/s Selection) CARD */}
+            <div className="qb-card">
+              <div className="qb-card-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="qb-icon-badge">
+                    <User size={18} color="#FF6B35" />
+                  </div>
+                  <div>
+                    <h3 className="qb-card-title">Customer Details (M/s Selection)</h3>
+                    <p className="qb-card-desc">Select existing client or type billing details</p>
                   </div>
                 </div>
 
-                <div className="bill-field-row" style={{ marginTop: '10px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>Date:</label>
+                <div className="qb-quick-pick">
+                  <span className="qb-quick-label">Quick Pick:</span>
+                  <select
+                    value={selectedCustomerId}
+                    onChange={(e) => handleSelectCustomer(e.target.value)}
+                    className="qb-quick-select"
+                  >
+                    <option value="">-- Pick Saved Customer --</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.mobile}) - {c.address.substring(0, 25)}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedCustomerId && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectCustomer('')}
+                      className="qb-reset-mini-btn"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="qb-customer-grid">
+                <div className="qb-field-group">
+                  <label className="qb-field-label">Customer Name *</label>
+                  <input
+                    ref={customerNameRef}
+                    type="text"
+                    placeholder="e.g. M/S. K.R. TRADERS"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="qb-input"
+                  />
+                </div>
+
+                <div className="qb-field-group">
+                  <label className="qb-field-label">City / Station / Address</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. BANGALORE / SIVAKASI"
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                    className="qb-input"
+                  />
+                </div>
+
+                <div className="qb-field-group">
+                  <label className="qb-field-label">
+                    Mobile Number <span className="qb-hint-badge">F3</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 9876543210"
+                    value={customerMobile}
+                    onChange={(e) => setCustomerMobile(e.target.value)}
+                    className="qb-input"
+                  />
+                </div>
+
+                <div className="qb-field-group">
+                  <label className="qb-field-label">GSTIN / PAN (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="33AAAAA0000A1Z5 (OPTIONAL)"
+                    value={customerGstin}
+                    onChange={(e) => setCustomerGstin(e.target.value)}
+                    className="qb-input"
+                  />
+                </div>
+              </div>
+
+              <div className="qb-customer-meta-grid">
+                <div className="qb-field-group">
+                  <label className="qb-field-label">Despatch / Bill Date</label>
                   <input
                     type="date"
                     value={billDate}
                     onChange={(e) => setBillDate(e.target.value)}
-                    className="bill-date-input"
+                    className="qb-input"
                   />
                 </div>
-              </div>
 
-              {/* Existing Customer Dropdown Search */}
-              <div className="billing-col customer-selection-col">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '4px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#4B4DFF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Customer Selection
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '500' }}>OR Type Below</span>
+                <div className="qb-field-group">
+                  <label className="qb-field-label">Invoice Document Type</label>
+                  <select
+                    value={docFormat}
+                    onChange={(e) => setDocFormat(e.target.value)}
+                    className="qb-select"
+                  >
+                    <option value="INVOICE">INVOICE (Official GST 18%)</option>
+                    <option value="ESTIMATE">ESTIMATE (Wholesale / Supply)</option>
+                    <option value="QUOTATION">QUOTATION (Proforma Price)</option>
+                  </select>
                 </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block', fontWeight: '500' }}>
-                    Select Existing Client:
-                  </label>
-                  <div className="customer-dropdown-row">
-                    <select
-                      className="customer-select-input"
-                      value={selectedCustomerId}
-                      onChange={(e) => handleSelectCustomer(e.target.value)}
-                    >
-                      <option value="">-- Select Customer --</option>
-                      {customers.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.mobile}) - {c.address.substring(0, 20)}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="customer-reset-btn"
-                      onClick={() => handleSelectCustomer('')}
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-
-                <div className="price-gst-row">
-                  <div className="price-map-box">
-                    <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block', fontWeight: '600' }}>Price Map</label>
-                    <select
-                      className="price-map-select"
-                      value={priceMap}
-                      onChange={(e) => setPriceMap(e.target.value)}
-                    >
-                      <option value="Retail sales">Retail Sales</option>
-                      <option value="Wholesale">Wholesale Standard</option>
-                      <option value="Special Dealer">Special Dealer</option>
-                    </select>
-                  </div>
-                  <div className="gst-type-box">
-                    <label style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', display: 'block', fontWeight: '600' }}>GST Type</label>
-                    <div className="gst-type-badge">
-                      {isTaxBill ? 'GST Tax Invoice (18%)' : 'Non-GST Estimate'}
-                    </div>
-                  </div>
+                <div className="qb-field-group">
+                  <label className="qb-field-label">Price Mapping</label>
+                  <select
+                    value={priceMap}
+                    onChange={(e) => setPriceMap(e.target.value)}
+                    className="qb-select"
+                  >
+                    <option value="Retail sales">Retail Sales Rate</option>
+                    <option value="Wholesale">Wholesale Standard</option>
+                    <option value="Special Dealer">Special Dealer Direct</option>
+                  </select>
                 </div>
               </div>
-
-              {/* Direct Customer Name, Mobile, Address inputs */}
-              <div className="billing-col customer-details-col">
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#4B4DFF', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Client / Receiver Details
-                </div>
-                <div className="customer-inputs-grid">
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Name *</label>
-                    <input
-                      type="text"
-                      className="customer-field-input"
-                      placeholder="Customer name"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Mobile *</label>
-                    <input
-                      type="text"
-                      className="customer-field-input"
-                      placeholder="10 digit mobile"
-                      value={customerMobile}
-                      onChange={(e) => setCustomerMobile(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Address</label>
-                  <input
-                    type="text"
-                    className="customer-field-input"
-                    placeholder="Delivery location / city / pincode"
-                    value={customerAddress}
-                    onChange={(e) => setCustomerAddress(e.target.value)}
-                  />
-                </div>
-              </div>
-
             </div>
 
-            {/* Product Quick-Add Bar (Code, Product Name Search/Dropdown, Qty, Add Button) */}
-            <div className="product-add-bar">
-              <div className="pab-code" style={{ width: '130px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
-                  Code
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 1"
-                  value={selectedProductCode}
-                  onChange={(e) => handleCodeChange(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    background: '#F8FAFC',
-                    fontWeight: '700',
-                    fontSize: '14px',
-                    textAlign: 'center'
-                  }}
-                />
-              </div>
+            {/* 3. SELECT PRODUCT CARD (Category pills + Live search + Shelf) */}
+            <div className="qb-card">
+              <div className="qb-card-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Search size={18} color="#FF6B35" />
+                  <h3 className="qb-card-title">Select Product</h3>
+                  <span className="qb-count-badge">{filteredProducts.length} Products Available</span>
+                </div>
 
-              <div className="pab-select" style={{ flex: 1 }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
-                  Select Cracker Product
-                </label>
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => handleProductSelectChange(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    background: '#FFF',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  <option value="">-- Select Product From Master Catalog --</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>
-                      [{p.code}] {p.name} - ({p.content}) - Rs.{p.rate} (Stock: {p.stock})
-                    </option>
+                {/* Category Filter Pills */}
+                <div className="qb-category-scroll">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory('All')}
+                    className={`qb-cat-pill ${selectedCategory === 'All' ? 'active' : ''}`}
+                  >
+                    All ({products.length})
+                  </button>
+                  {initialCategories.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`qb-cat-pill ${selectedCategory === cat ? 'active' : ''}`}
+                    >
+                      {cat}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
-              <div className="pab-qty" style={{ width: '110px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
-                  Qty
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={itemQty}
-                  onChange={(e) => setItemQty(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    background: '#FFF',
-                    fontWeight: '700',
-                    fontSize: '14px',
-                    textAlign: 'center'
-                  }}
-                />
+              {/* Product Live Search Bar & Quick Code Input */}
+              <div className="qb-search-bar-wrap">
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: '14px', top: '14px' }} />
+                  <input
+                    ref={productSearchRef}
+                    type="text"
+                    placeholder="Search cracker product by Name, Code (e.g. 1, 15), Category... (Press F4)"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="qb-search-input"
+                  />
+                  {productSearch && (
+                    <button
+                      onClick={() => setProductSearch('')}
+                      style={{ position: 'absolute', right: '12px', top: '12px', border: 'none', background: 'transparent', color: '#94A3B8', cursor: 'pointer', fontSize: '13px' }}
+                    >✕</button>
+                  )}
+                </div>
+
+                {/* Quick Code & Qty Adder */}
+                <div className="qb-quick-code-box">
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Code:</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1"
+                      value={selectedProductCode}
+                      onChange={(e) => handleCodeChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const found = products.find(p => String(p.code) === String(selectedProductCode));
+                          if (found) {
+                            handleQuickAddProduct(found, itemQty);
+                            setSelectedProductCode('');
+                          } else {
+                            showToast(`Product code ${selectedProductCode} not found!`);
+                          }
+                        }
+                      }}
+                      className="qb-code-input"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Qty:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={itemQty}
+                      onChange={(e) => setItemQty(e.target.value)}
+                      className="qb-qty-input"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const found = products.find(p => String(p.code) === String(selectedProductCode));
+                      if (found) {
+                        handleQuickAddProduct(found, itemQty);
+                        setSelectedProductCode('');
+                      } else {
+                        showToast('Please enter a valid product code first!');
+                      }
+                    }}
+                    className="qb-add-btn"
+                  >
+                    + Add
+                  </button>
+                </div>
               </div>
 
-              <div className="pab-btn" style={{ alignSelf: 'flex-end' }}>
-                <button
-                  onClick={handleAddItem}
-                  style={{
-                    background: 'linear-gradient(135deg, #FF6B35 0%, #F59E0B 100%)',
-                    color: '#FFF',
-                    border: 'none',
-                    padding: '10px 22px',
-                    borderRadius: '10px',
-                    fontWeight: '700',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 12px rgba(255, 107, 53, 0.28)'
-                  }}
-                >
-                  <PlusCircle size={17} /> Add Product
-                </button>
+              {/* Quick Product Shelf / Grid (Tap to add instantly) */}
+              <div className="qb-product-shelf">
+                {filteredProducts.length === 0 ? (
+                  <div style={{ padding: '30px', textAlign: 'center', color: '#94A3B8', width: '100%' }}>
+                    No products matching "<b>{productSearch}</b>" in {selectedCategory}.
+                  </div>
+                ) : (
+                  filteredProducts.slice(0, 24).map(p => (
+                    <div
+                      key={p.id}
+                      className="qb-product-card"
+                      onClick={() => handleQuickAddProduct(p, 1)}
+                    >
+                      <div className="qb-pc-top">
+                        <span className="qb-pc-code">#{p.code}</span>
+                        <span className="qb-pc-cat">{p.category}</span>
+                      </div>
+                      <div className="qb-pc-name">{p.name}</div>
+                      <div className="qb-pc-meta">
+                        <span className="qb-pc-content">{p.content}</span>
+                        <span className="qb-pc-stock">Stock: {p.stock}</span>
+                      </div>
+                      <div className="qb-pc-bottom">
+                        <span className="qb-pc-rate">₹{formatNumber(p.rate)}</span>
+                        <button
+                          type="button"
+                          className="qb-pc-add-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuickAddProduct(p, 1);
+                          }}
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1119,23 +1281,42 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Payment Mode Selector */}
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                    Payment Mode
+                  </label>
+                  <div className="qb-payment-modes">
+                    {['Cash', 'GPay / UPI', 'Bank', 'Credit'].map(mode => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPaymentMode(mode)}
+                        className={`qb-pay-btn ${paymentMode === mode ? 'active' : ''}`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Net Final Payable Box */}
                 <div style={{
-                  background: 'linear-gradient(135deg, #4B4DFF 0%, #6D3DFF 100%)',
+                  background: 'linear-gradient(135deg, #FF6B35 0%, #EA580C 100%)',
                   borderRadius: '12px',
                   padding: '16px',
                   color: '#FFFFFF',
                   marginTop: '8px',
-                  boxShadow: '0 8px 20px rgba(75, 77, 255, 0.28)'
+                  boxShadow: '0 8px 20px rgba(255, 107, 53, 0.28)'
                 }}>
-                  <div style={{ fontSize: '12px', opacity: 0.9, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Net Final Amount (Rs.)
+                  <div style={{ fontSize: '11px', opacity: 0.9, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Net Final Amount (₹)
                   </div>
                   <div className="net-amount-value" style={{ fontSize: '28px', fontWeight: '800', marginTop: '4px' }}>
                     ₹ {formatNumber(netAmount)}
                   </div>
                   <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
-                    {activeTab === 'estimate' ? 'Estimate of Supply' : (activeTab === 'taxbill' ? 'Official GST Invoice' : 'Quotation')}
+                    {docFormat === 'INVOICE' ? 'Official GST Tax Invoice' : (docFormat === 'ESTIMATE' ? 'Estimate of Supply' : 'Official Quotation')}
                   </div>
                 </div>
 
@@ -1144,23 +1325,23 @@ export default function App() {
                   <button
                     onClick={() => handleSaveAndPrint(true)}
                     style={{
-                      background: '#4B4DFF',
+                      background: '#FF6B35',
                       color: '#FFF',
                       border: 'none',
-                      padding: '12px',
+                      padding: '13px',
                       borderRadius: '10px',
-                      fontWeight: '700',
+                      fontWeight: '800',
                       fontSize: '14px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 14px rgba(75, 77, 255, 0.3)',
+                      boxShadow: '0 4px 14px rgba(255, 107, 53, 0.35)',
                       transition: 'all 0.2s'
                     }}
                   >
-                    <Printer size={18} /> Save & Print PDF Bill
+                    <Printer size={18} /> Save & Print Bill (F5)
                   </button>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
@@ -1192,7 +1373,7 @@ export default function App() {
                         cursor: 'pointer'
                       }}
                     >
-                      Reset / Clear
+                      New Bill (F2)
                     </button>
                   </div>
                 </div>
