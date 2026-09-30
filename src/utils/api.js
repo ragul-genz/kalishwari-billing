@@ -224,3 +224,15 @@ export async function syncLocalStorageToDb(payload) {
     throw err;
   }
 }
+
+export async function fetchStats(year) {
+  try {
+    const res = await fetch(`${API_BASE}/stats?year=${encodeURIComponent(year)}`);
+    if (!res.ok) throw new Error('Failed to fetch stats');
+    return await res.json();
+  } catch (err) {
+    console.warn('API error fetching stats', err);
+    return null;
+  }
+}
+

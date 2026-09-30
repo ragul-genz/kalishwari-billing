@@ -397,6 +397,46 @@ router.post('/invoices', async (req, res) => {
       }
     }
 
+    // Auto-update or create customer in database customers table
+    if (inv.customerName && inv.customerName !== 'Direct Counter Sale') {
+      const isCredit = inv.paymentMode === 'Credit';
+      const billAmount = Number(inv.netAmount) || 0;
+      const [existingCust] = await conn.query(
+        'SELECT id FROM customers WHERE year = ? AND (name = ? OR (mobile = ? AND mobile != "-" AND mobile != "")) LIMIT 1',
+        [year, inv.customerName, inv.customerMobile || '']
+      );
+
+      if (existingCust.length > 0) {
+        await conn.query(
+          `UPDATE customers SET 
+            total_orders = total_orders + 1,
+            balance = balance + ?,
+            address = CASE WHEN (address = '' OR address = 'Sivakasi' OR address = '-') AND ? != '-' AND ? != '' THEN ? ELSE address END,
+            gstin = CASE WHEN (gstin = '' OR gstin IS NULL OR gstin = '-') AND ? != '-' AND ? != '' THEN ? ELSE gstin END
+           WHERE id = ?`,
+          [
+            isCredit ? billAmount : 0,
+            inv.customerAddress || '', inv.customerAddress || '', inv.customerAddress || '',
+            inv.customerGstin || '', inv.customerGstin || '', inv.customerGstin || '',
+            existingCust[0].id
+          ]
+        );
+      } else if (inv.customerName.trim().length > 1) {
+        await conn.query(
+          `INSERT INTO customers (year, name, mobile, address, gstin, total_orders, balance)
+           VALUES (?, ?, ?, ?, ?, 1, ?)`,
+          [
+            year,
+            inv.customerName.trim(),
+            inv.customerMobile && inv.customerMobile !== '-' ? inv.customerMobile : '',
+            inv.customerAddress && inv.customerAddress !== '-' ? inv.customerAddress : 'Sivakasi',
+            inv.customerGstin && inv.customerGstin !== '-' ? inv.customerGstin : '',
+            isCredit ? billAmount : 0
+          ]
+        );
+      }
+    }
+
     await conn.commit();
     res.json({ success: true, id: result.insertId, billNo: inv.billNo });
   } catch (error) {
@@ -410,11 +450,40 @@ router.post('/invoices', async (req, res) => {
 router.delete('/invoices/:billNo', async (req, res) => {
   const billNo = req.params.billNo;
   const year = req.query.year || '2026';
+  const conn = await pool.getConnection();
   try {
-    await pool.query('DELETE FROM invoices WHERE year = ? AND bill_no = ?', [year, billNo]);
+    await conn.beginTransaction();
+    // Retrieve items before delete to restore product stocks
+    const [rows] = await conn.query('SELECT items, type FROM invoices WHERE year = ? AND bill_no = ?', [year, billNo]);
+    if (rows.length > 0) {
+      const inv = rows[0];
+      if (inv.type !== 'quotation') {
+        let items = [];
+        try {
+          items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []);
+        } catch (e) {
+          items = [];
+        }
+        for (const item of items) {
+          const qty = Number(item.qty) || 0;
+          if (qty > 0 && (item.productId || item.code)) {
+            await conn.query(
+              'UPDATE products SET stock = stock + ? WHERE year = ? AND (id = ? OR code = ?)',
+              [qty, year, item.productId || 0, String(item.code || '')]
+            );
+          }
+        }
+      }
+    }
+
+    await conn.query('DELETE FROM invoices WHERE year = ? AND bill_no = ?', [year, billNo]);
+    await conn.commit();
     res.json({ success: true, billNo: Number(billNo) });
   } catch (error) {
+    await conn.rollback();
     res.status(500).json({ error: error.message });
+  } finally {
+    conn.release();
   }
 });
 
@@ -425,6 +494,36 @@ router.delete('/invoices-all', async (req, res) => {
     res.json({ success: true, message: `Cleared all invoices for year ${year}` });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Live Database Statistics (for Settings, Dashboard, and Reports)
+router.get('/stats', async (req, res) => {
+  const year = req.query.year || '2026';
+  try {
+    const [[prodCount]] = await pool.query('SELECT COUNT(*) as count FROM products WHERE year = ?', [year]);
+    const [[custCount]] = await pool.query('SELECT COUNT(*) as count FROM customers WHERE year = ?', [year]);
+    const [[invStats]] = await pool.query(
+      'SELECT COUNT(*) as count, COALESCE(SUM(gross_total), 0) as totalGross, COALESCE(SUM(net_amount), 0) as totalNet FROM invoices WHERE year = ?',
+      [year]
+    );
+    const [years] = await pool.query('SELECT year FROM years ORDER BY year ASC');
+
+    res.json({
+      ok: true,
+      year,
+      productsCount: Number(prodCount.count || 0),
+      customersCount: Number(custCount.count || 0),
+      invoicesCount: Number(invStats.count || 0),
+      totalGross: Number(invStats.totalGross || 0),
+      totalNet: Number(invStats.totalNet || 0),
+      years: years.map(y => String(y.year)),
+      database: process.env.DB_NAME || 'kalishwaribilling',
+      host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+      serverTime: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

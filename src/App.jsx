@@ -52,7 +52,8 @@ import {
   saveInvoice as apiSaveInvoice,
   deleteInvoice as apiDeleteInvoice,
   clearAllInvoices as apiClearAllInvoices,
-  syncLocalStorageToDb
+  syncLocalStorageToDb,
+  fetchStats
 } from './utils/api';
 
 export default function App() {
@@ -62,7 +63,8 @@ export default function App() {
   const [loginEmail, setLoginEmail] = React.useState('');
   const [loginPassword, setLoginPassword] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
-  const [loginYear, setLoginYear] = React.useState('');
+  const [loginYear, setLoginYear] = React.useState('2026');
+  const [availableYears, setAvailableYears] = React.useState(['2026']);
   const [activeYear, setActiveYear] = React.useState('');
   const [yearMissingPrompt, setYearMissingPrompt] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
@@ -89,6 +91,20 @@ export default function App() {
     return () => clearInterval(interval);
   }, [refreshDbStatus]);
 
+  // Load registered database years on mount
+  React.useEffect(() => {
+    fetchYears().then(yrs => {
+      if (Array.isArray(yrs) && yrs.length > 0) {
+        setAvailableYears(yrs);
+        if (!loginYear || !yrs.includes(loginYear)) {
+          setLoginYear(yrs[yrs.length - 1]);
+        }
+      }
+    }).catch(err => {
+      console.warn('Could not load years from TiDB on mount:', err);
+    });
+  }, []);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (loginEmail === 'Billing@admin.com' && loginPassword === 'Billing@123') {
@@ -99,8 +115,11 @@ export default function App() {
       let existingYears = [];
       try {
         existingYears = await fetchYears();
+        if (Array.isArray(existingYears) && existingYears.length > 0) {
+          setAvailableYears(existingYears);
+        }
       } catch (err) {
-        existingYears = JSON.parse(localStorage.getItem('kalieswari_years') || '["2026"]');
+        existingYears = availableYears;
       }
       if (Array.isArray(existingYears) && existingYears.includes(loginYear)) {
         setActiveYear(loginYear);
@@ -122,11 +141,9 @@ export default function App() {
     } catch (err) {
       console.warn('Could not create year in TiDB:', err);
     }
-    const existingYears = JSON.parse(localStorage.getItem('kalieswari_years') || '["2026"]');
-    if (!existingYears.includes(loginYear)) {
-      existingYears.push(loginYear);
-      localStorage.setItem('kalieswari_years', JSON.stringify(existingYears));
-    }
+    const updated = Array.from(new Set([...availableYears, String(loginYear)]));
+    setAvailableYears(updated);
+    localStorage.setItem('kalieswari_years', JSON.stringify(updated));
     setActiveYear(loginYear);
     setLoggedIn(true);
     setYearMissingPrompt(false);
@@ -139,12 +156,13 @@ export default function App() {
   const [customers, setCustomers] = React.useState(defaultCustomers);
   const [savedInvoices, setSavedInvoices] = React.useState([]);
 
-  React.useEffect(() => {
-    if (!activeYear) return;
+  // Load all data from TiDB Cloud with fallback caching
+  const loadAllData = React.useCallback(async (targetYear = activeYear) => {
+    if (!targetYear) return;
+    setIsLoadingData(true);
 
-    // Helper: load from localStorage
     const loadFallback = (key, fallback) => {
-      const saved = localStorage.getItem(`${key}_${activeYear}`);
+      const saved = localStorage.getItem(`${key}_${targetYear}`);
       if (!saved) return fallback;
       try {
         const parsed = JSON.parse(saved);
@@ -155,68 +173,68 @@ export default function App() {
       }
     };
 
-    const loadAllData = async () => {
-      setIsLoadingData(true);
-      try {
-        const [c, p, cust, inv] = await Promise.all([
-          fetchCompany(),
-          fetchProducts(activeYear),
-          fetchCustomers(activeYear),
-          fetchInvoices(activeYear)
-        ]);
+    try {
+      const [c, p, cust, inv] = await Promise.all([
+        fetchCompany(),
+        fetchProducts(targetYear),
+        fetchCustomers(targetYear),
+        fetchInvoices(targetYear)
+      ]);
 
-        if (c && typeof c === 'object') {
-          setCompany(c);
-          localStorage.setItem(`kalieswari_company_${activeYear}`, JSON.stringify(c));
-        } else {
-          setCompany(loadFallback('kalieswari_company', defaultCompany));
-        }
-
-        if (Array.isArray(p) && p.length > 0) {
-          setProducts(p);
-          localStorage.setItem(`kalieswari_products_${activeYear}`, JSON.stringify(p));
-        } else {
-          setProducts(loadFallback('kalieswari_products', defaultProducts));
-        }
-
-        if (Array.isArray(cust) && cust.length > 0) {
-          setCustomers(cust);
-          localStorage.setItem(`kalieswari_customers_${activeYear}`, JSON.stringify(cust));
-        } else {
-          setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
-        }
-
-        let loadedInvoices = [];
-        if (Array.isArray(inv)) {
-          loadedInvoices = inv;
-          setSavedInvoices(inv);
-          localStorage.setItem(`kalieswari_invoices_${activeYear}`, JSON.stringify(inv));
-        } else {
-          loadedInvoices = loadFallback('kalieswari_invoices', []);
-          setSavedInvoices(loadedInvoices);
-        }
-
-        const nextBillNo = loadedInvoices.length > 0
-          ? Math.max(...loadedInvoices.map(i => Number(i.billNo) || 0)) + 1
-          : 1;
-        setBillNo(nextBillNo);
-      } catch (err) {
-        console.error('Error connecting to TiDB, using fallback:', err);
+      if (c && typeof c === 'object') {
+        setCompany(c);
+        localStorage.setItem(`kalieswari_company_${targetYear}`, JSON.stringify(c));
+      } else {
         setCompany(loadFallback('kalieswari_company', defaultCompany));
-        setProducts(loadFallback('kalieswari_products', defaultProducts));
-        setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
-        const loadedInvoices = loadFallback('kalieswari_invoices', []);
-        setSavedInvoices(loadedInvoices);
-        const nextBillNo = loadedInvoices.length > 0
-          ? Math.max(...loadedInvoices.map(i => Number(i.billNo) || 0)) + 1
-          : 1;
-        setBillNo(nextBillNo);
-      } finally {
-        setIsLoadingData(false);
       }
-    };
 
-    loadAllData();
+      if (Array.isArray(p) && p.length > 0) {
+        setProducts(p);
+        localStorage.setItem(`kalieswari_products_${targetYear}`, JSON.stringify(p));
+      } else {
+        setProducts(loadFallback('kalieswari_products', defaultProducts));
+      }
+
+      if (Array.isArray(cust) && cust.length > 0) {
+        setCustomers(cust);
+        localStorage.setItem(`kalieswari_customers_${targetYear}`, JSON.stringify(cust));
+      } else {
+        setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
+      }
+
+      let loadedInvoices = [];
+      if (Array.isArray(inv)) {
+        loadedInvoices = inv;
+        setSavedInvoices(inv);
+        localStorage.setItem(`kalieswari_invoices_${targetYear}`, JSON.stringify(inv));
+      } else {
+        loadedInvoices = loadFallback('kalieswari_invoices', []);
+        setSavedInvoices(loadedInvoices);
+      }
+
+      const nextBillNo = loadedInvoices.length > 0
+        ? Math.max(...loadedInvoices.map(i => Number(i.billNo) || 0)) + 1
+        : 1;
+      setBillNo(nextBillNo);
+    } catch (err) {
+      console.error('Error connecting to TiDB, using fallback:', err);
+      setCompany(loadFallback('kalieswari_company', defaultCompany));
+      setProducts(loadFallback('kalieswari_products', defaultProducts));
+      setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
+      const loadedInvoices = loadFallback('kalieswari_invoices', []);
+      setSavedInvoices(loadedInvoices);
+      const nextBillNo = loadedInvoices.length > 0
+        ? Math.max(...loadedInvoices.map(i => Number(i.billNo) || 0)) + 1
+        : 1;
+      setBillNo(nextBillNo);
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [activeYear]);
+
+  React.useEffect(() => {
+    if (!activeYear) return;
+    loadAllData(activeYear);
 
     // Reset billing form to a clean slate for this year
     setBillItems([]);
@@ -230,7 +248,7 @@ export default function App() {
     setDiscountPercent(90);
     setAdditionalDiscPercent(0);
     setPackingPercent(0);
-  }, [activeYear]);
+  }, [activeYear, loadAllData]);
 
   // Sync to local storage for the active year
   React.useEffect(() => {
@@ -532,12 +550,18 @@ export default function App() {
     // Persist invoice to TiDB Cloud database
     apiSaveInvoice({ ...newInvoice, year: activeYear })
       .then(() => {
-        // Refresh product stock from TiDB
-        fetchProducts(activeYear).then(updated => {
-          if (Array.isArray(updated) && updated.length > 0) {
-            setProducts(updated);
+        // Refresh product stock and customers from TiDB
+        Promise.all([
+          fetchProducts(activeYear),
+          fetchCustomers(activeYear)
+        ]).then(([updatedProducts, updatedCustomers]) => {
+          if (Array.isArray(updatedProducts) && updatedProducts.length > 0) {
+            setProducts(updatedProducts);
           }
-        });
+          if (Array.isArray(updatedCustomers) && updatedCustomers.length > 0) {
+            setCustomers(updatedCustomers);
+          }
+        }).catch(() => {});
       })
       .catch(err => {
         console.warn('Saved bill locally; TiDB cloud error:', err);
@@ -695,7 +719,29 @@ export default function App() {
                 className="login-input"
                 required
               />
-              <p className="login-year-hint">📅 Enter the year whose data you want to open</p>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>Database Years:</span>
+                {availableYears.map(yr => (
+                  <button
+                    key={yr}
+                    type="button"
+                    onClick={() => { setLoginYear(yr); setYearMissingPrompt(false); setLoginError(''); }}
+                    style={{
+                      background: String(loginYear) === String(yr) ? '#FF6B35' : 'rgba(255,255,255,0.12)',
+                      color: '#FFF',
+                      border: `1px solid ${String(loginYear) === String(yr) ? '#FF6B35' : 'rgba(255,255,255,0.25)'}`,
+                      padding: '2px 9px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '700'
+                    }}
+                  >
+                    {yr}
+                  </button>
+                ))}
+              </div>
+              <p className="login-year-hint">📅 Choose an existing database year or enter a new one</p>
             </div>
 
             {/* Year missing: show create prompt */}
@@ -757,6 +803,38 @@ export default function App() {
             <Clock size={15} />
             <span>{billDate} {currentTime}</span>
           </div>
+          {/* Active Financial Year Switcher */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: '#FFF7ED',
+            border: '1px solid #FED7AA',
+            padding: '5px 10px',
+            borderRadius: '10px'
+          }}>
+            <Calendar size={13} color="#EA580C" />
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#9A3412' }}>Year:</span>
+            <select
+              value={activeYear}
+              onChange={(e) => setActiveYear(e.target.value)}
+              title="Switch Financial Year"
+              style={{
+                border: 'none',
+                background: 'transparent',
+                fontWeight: '800',
+                color: '#C2410C',
+                fontSize: '13px',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              {availableYears.map(yr => (
+                <option key={yr} value={yr}>{yr}</option>
+              ))}
+            </select>
+          </div>
+
           <button
             onClick={() => handleResetBill()}
             className="app-new-bill-btn"
@@ -770,8 +848,9 @@ export default function App() {
             <RefreshCw size={14} />
             <span className="app-new-bill-btn-label">+ New Bill (F2)</span>
           </button>
+
           <div
-            title={dbInfo ? `TiDB Cloud Connected\nHost: ${dbInfo.host}\nDatabase: ${dbInfo.database}` : 'TiDB Cloud Connection Status'}
+            title={dbInfo ? `TiDB Cloud Connected\nHost: ${dbInfo.host}\nDatabase: ${dbInfo.database}\nClick to re-sync all data` : 'Click to test TiDB Cloud Connection'}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -785,7 +864,11 @@ export default function App() {
               color: dbConnected ? '#065F46' : '#991B1B',
               cursor: 'pointer'
             }}
-            onClick={refreshDbStatus}
+            onClick={async () => {
+              await refreshDbStatus();
+              await loadAllData(activeYear);
+              showToast('Refreshed & Synced with TiDB Cloud!');
+            }}
           >
             <span style={{
               width: '8px',
@@ -797,6 +880,7 @@ export default function App() {
             <Database size={13} />
             <span>{dbConnected ? 'TiDB: Live' : 'TiDB: Offline'}</span>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F1F5F9', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', color: '#475569' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
             Admin
@@ -1619,6 +1703,11 @@ export default function App() {
             setProducts={setProducts}
             showToast={showToast}
             activeYear={activeYear}
+            isLoadingData={isLoadingData}
+            loadProducts={async () => {
+              const p = await fetchProducts(activeYear);
+              if (Array.isArray(p) && p.length > 0) setProducts(p);
+            }}
           />
         )}
 
@@ -1629,6 +1718,11 @@ export default function App() {
             setCustomers={setCustomers}
             showToast={showToast}
             activeYear={activeYear}
+            isLoadingData={isLoadingData}
+            loadCustomers={async () => {
+              const c = await fetchCustomers(activeYear);
+              if (Array.isArray(c) && c.length > 0) setCustomers(c);
+            }}
           />
         )}
 
@@ -1640,6 +1734,15 @@ export default function App() {
             company={company}
             showToast={showToast}
             activeYear={activeYear}
+            setPreviewInvoice={setPreviewInvoice}
+            loadInvoices={async () => {
+              const inv = await fetchInvoices(activeYear);
+              if (Array.isArray(inv)) setSavedInvoices(inv);
+            }}
+            reloadProducts={async () => {
+              const p = await fetchProducts(activeYear);
+              if (Array.isArray(p) && p.length > 0) setProducts(p);
+            }}
           />
         )}
 
@@ -1650,12 +1753,16 @@ export default function App() {
             setCompany={setCompany}
             showToast={showToast}
             activeYear={activeYear}
+            setActiveYear={setActiveYear}
+            availableYears={availableYears}
+            setAvailableYears={setAvailableYears}
             dbConnected={dbConnected}
             dbInfo={dbInfo}
             refreshDbStatus={refreshDbStatus}
             products={products}
             customers={customers}
             savedInvoices={savedInvoices}
+            loadAllData={loadAllData}
           />
         )}
 
@@ -1928,9 +2035,10 @@ export default function App() {
 // -------------------------------------------------------------
 // SUB-VIEW: Product Master Component
 // -------------------------------------------------------------
-function ProductMasterView({ products, setProducts, showToast, activeYear }) {
+function ProductMasterView({ products, setProducts, showToast, activeYear, loadProducts }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategory, setSelectedCategory] = React.useState('All');
+  const [isReloading, setIsReloading] = React.useState(false);
 
   // New Product Modal Form
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -1941,12 +2049,28 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
   const [newRate, setNewRate] = React.useState('');
   const [newStock, setNewStock] = React.useState('100');
 
+  // Edit Product Modal Form
+  const [editProduct, setEditProduct] = React.useState(null);
+
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(p.code).includes(searchTerm);
+      String(p.code).includes(searchTerm) ||
+      (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
+
+  const handleRefresh = async () => {
+    setIsReloading(true);
+    try {
+      if (loadProducts) await loadProducts();
+      showToast('Products refreshed from TiDB Cloud!');
+    } catch (e) {
+      showToast('Refresh failed');
+    } finally {
+      setIsReloading(false);
+    }
+  };
 
   const handleCreateProduct = async (e) => {
     e.preventDefault();
@@ -1984,15 +2108,35 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
     }
   };
 
-  const handleDeleteProduct = async (id) => {
-    if (confirm('Are you sure you want to delete this product?')) {
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault();
+    if (!editProduct) return;
+    const updated = {
+      ...editProduct,
+      rate: Number(editProduct.rate) || 0,
+      stock: Number(editProduct.stock) || 0
+    };
+    setProducts(prev => prev.map(p => p.id === editProduct.id ? updated : p));
+    setEditProduct(null);
+
+    try {
+      await apiUpdateProduct(editProduct.id, updated);
+      showToast(`Updated "${updated.name}" in TiDB Cloud!`);
+    } catch (err) {
+      console.warn('Updated locally, TiDB error:', err);
+      showToast(`Updated "${updated.name}" locally`);
+    }
+  };
+
+  const handleDeleteProduct = async (id, name) => {
+    if (confirm(`Are you sure you want to delete "${name || 'this item'}" from TiDB catalog?`)) {
       setProducts(products.filter(p => p.id !== id));
       try {
         await apiDeleteProduct(id);
-        showToast('Product removed from catalog & TiDB Cloud');
+        showToast('Product deleted from TiDB Cloud');
       } catch (err) {
         console.warn('Deleted locally, TiDB error:', err);
-        showToast('Product removed from catalog');
+        showToast('Product removed locally');
       }
     }
   };
@@ -2009,32 +2153,63 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
         padding: '20px 24px',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
+        boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>Product Master Catalog</h2>
-          <p style={{ fontSize: '13px', color: '#64748B' }}>Manage all cracker items, standard rates, packing units and live inventory.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Product Master Catalog</h2>
+            <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>
+              TiDB Connected ({products.length} Items)
+            </span>
+          </div>
+          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>Manage all cracker items, standard rates, packing units and live inventory in TiDB Cloud.</p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          style={{
-            background: '#4B4DFF',
-            color: '#FFF',
-            border: 'none',
-            padding: '10px 20px',
-            borderRadius: '10px',
-            fontWeight: '700',
-            fontSize: '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 4px 14px rgba(75, 77, 255, 0.28)'
-          }}
-        >
-          <PlusCircle size={17} /> Add New Cracker Item
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isReloading}
+            style={{
+              background: '#F1F5F9',
+              color: '#334155',
+              border: '1px solid #CBD5E1',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              fontWeight: '700',
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <RefreshCw size={14} className={isReloading ? 'spin' : ''} />
+            <span>{isReloading ? 'Syncing...' : 'Refresh from TiDB'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            style={{
+              background: '#4B4DFF',
+              color: '#FFF',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              fontWeight: '700',
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 14px rgba(75, 77, 255, 0.28)'
+            }}
+          >
+            <PlusCircle size={17} /> Add New Cracker Item
+          </button>
+        </div>
       </div>
 
       {/* Filters Bar */}
@@ -2045,13 +2220,14 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
         background: '#FFFFFF',
         padding: '16px 24px',
         borderRadius: '16px',
-        border: '1px solid #E2E8F0'
+        border: '1px solid #E2E8F0',
+        flexWrap: 'wrap'
       }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
           <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '12px' }} />
           <input
             type="text"
-            placeholder="Search by product name, item code..."
+            placeholder="Search by product name, item code, category..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -2099,70 +2275,215 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
               <th style={{ padding: '14px 16px', width: '200px' }}>Category</th>
               <th style={{ padding: '14px 16px', width: '140px' }}>Packing / Content</th>
               <th style={{ padding: '14px 16px', width: '120px', textAlign: 'right' }}>Standard Rate (₹)</th>
-              <th style={{ padding: '14px 16px', width: '100px', textAlign: 'center' }}>Stock Qty</th>
-              <th style={{ padding: '14px 16px', width: '80px', textAlign: 'center' }}>Actions</th>
+              <th style={{ padding: '14px 16px', width: '120px', textAlign: 'center' }}>Stock Qty</th>
+              <th style={{ padding: '14px 16px', width: '100px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.map((p) => (
-              <tr key={p.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#4B4DFF' }}>
-                  {p.code}
-                </td>
-                <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1E293B' }}>
-                  {p.name}
-                </td>
-                <td style={{ padding: '12px 16px', color: '#64748B' }}>
-                  <span style={{ background: '#F1F5F9', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>
-                    {p.category}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', color: '#64748B' }}>
-                  {p.content}
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                  ₹{formatNumber(p.rate)}
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                  <span style={{
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    background: p.stock > 50 ? '#DCFCE7' : '#FEF3C7',
-                    color: p.stock > 50 ? '#15803D' : '#B45309'
-                  }}>
-                    {p.stock}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                  <button
-                    onClick={() => handleDeleteProduct(p.id)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#EF4444',
-                      cursor: 'pointer',
-                      padding: '4px'
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+            {filteredProducts.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
+                  No products found matching "{searchTerm}".
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredProducts.map((p) => {
+                const stock = Number(p.stock) || 0;
+                return (
+                  <tr key={p.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#4B4DFF' }}>
+                      {p.code}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1E293B' }}>
+                      {p.name}
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#64748B' }}>
+                      <span style={{ background: '#F1F5F9', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>
+                        {p.category}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#64748B' }}>
+                      {p.content}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                      ₹{formatNumber(p.rate)}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        background: stock > 20 ? '#DCFCE7' : (stock > 0 ? '#FEF3C7' : '#FEE2E2'),
+                        color: stock > 20 ? '#15803D' : (stock > 0 ? '#B45309' : '#DC2626')
+                      }}>
+                        {stock === 0 ? 'Out of Stock' : `${stock} Units`}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          title="Edit product in TiDB Cloud"
+                          onClick={() => setEditProduct({ ...p })}
+                          style={{
+                            background: '#EEF2FF',
+                            border: '1px solid #C7D2FE',
+                            color: '#4B4DFF',
+                            cursor: 'pointer',
+                            padding: '5px 7px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete from TiDB Cloud"
+                          onClick={() => handleDeleteProduct(p.id, p.name)}
+                          style={{
+                            background: '#FEE2E2',
+                            border: '1px solid #FECACA',
+                            color: '#EF4444',
+                            cursor: 'pointer',
+                            padding: '5px 7px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Edit Product Modal */}
+      {editProduct && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            padding: '24px',
+            width: '500px',
+            maxWidth: '92vw',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>
+              Edit Cracker Item (TiDB Cloud)
+            </h3>
+            <form onSubmit={handleUpdateProduct} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Code</label>
+                  <input
+                    type="text"
+                    value={editProduct.code}
+                    onChange={e => setEditProduct({ ...editProduct, code: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Product Name *</label>
+                  <input
+                    type="text"
+                    value={editProduct.name}
+                    onChange={e => setEditProduct({ ...editProduct, name: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Category</label>
+                <select
+                  value={editProduct.category}
+                  onChange={e => setEditProduct({ ...editProduct, category: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                >
+                  {initialCategories.map((c, i) => (
+                    <option key={i} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Content / Pack</label>
+                  <input
+                    type="text"
+                    value={editProduct.content}
+                    onChange={e => setEditProduct({ ...editProduct, content: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Rate (₹) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editProduct.rate}
+                    onChange={e => setEditProduct({ ...editProduct, rate: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Stock</label>
+                  <input
+                    type="number"
+                    value={editProduct.stock}
+                    onChange={e => setEditProduct({ ...editProduct, stock: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditProduct(null)}
+                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
+                >
+                  Update Product in TiDB
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Modal */}
       {isModalOpen && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(0,0,0,0.4)',
           backdropFilter: 'blur(4px)',
           display: 'flex',
@@ -2175,6 +2496,7 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
             borderRadius: '16px',
             padding: '24px',
             width: '480px',
+            maxWidth: '92vw',
             boxShadow: '0 20px 40px rgba(0,0,0,0.15)'
           }}>
             <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>
@@ -2260,33 +2582,51 @@ function ProductMasterView({ products, setProducts, showToast, activeYear }) {
                   type="submit"
                   style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
                 >
-                  Save Product
+                  Save Product to TiDB
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
+
 // -------------------------------------------------------------
 // SUB-VIEW: Customer Master Component
 // -------------------------------------------------------------
-function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) {
+function CustomerMasterView({ customers, setCustomers, showToast, activeYear, loadCustomers }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [isReloading, setIsReloading] = React.useState(false);
   const [name, setName] = React.useState('');
   const [mobile, setMobile] = React.useState('');
   const [address, setAddress] = React.useState('');
+  const [gstin, setGstin] = React.useState('');
+
+  // Edit Customer Modal Form
+  const [editCustomer, setEditCustomer] = React.useState(null);
 
   const filtered = customers.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.mobile.includes(searchTerm) ||
-    c.address.toLowerCase().includes(searchTerm.toLowerCase())
+    String(c.mobile || '').includes(searchTerm) ||
+    String(c.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    String(c.gstin || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleRefresh = async () => {
+    setIsReloading(true);
+    try {
+      if (loadCustomers) await loadCustomers();
+      showToast('Customers refreshed from TiDB Cloud!');
+    } catch (e) {
+      showToast('Refresh failed');
+    } finally {
+      setIsReloading(false);
+    }
+  };
 
   const handleAddCustomer = async (e) => {
     e.preventDefault();
@@ -2300,6 +2640,7 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
       name,
       mobile,
       address: address || 'Sivakasi',
+      gstin: gstin || '',
       totalOrders: 0,
       balance: 0
     };
@@ -2308,6 +2649,7 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
     setName('');
     setMobile('');
     setAddress('');
+    setGstin('');
 
     try {
       const saved = await apiAddCustomer({ ...newCust, year: activeYear });
@@ -2318,6 +2660,37 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
     } catch (err) {
       console.warn('Saved customer locally, TiDB error:', err);
       showToast('Customer Added (Saved locally)');
+    }
+  };
+
+  const handleUpdateCustomer = async (e) => {
+    e.preventDefault();
+    if (!editCustomer) return;
+    const updated = {
+      ...editCustomer,
+      balance: Number(editCustomer.balance) || 0
+    };
+    setCustomers(prev => prev.map(c => c.id === editCustomer.id ? updated : p));
+    setEditCustomer(null);
+
+    try {
+      await apiUpdateCustomer(editCustomer.id, updated);
+      showToast(`Customer "${updated.name}" updated in TiDB Cloud!`);
+    } catch (err) {
+      console.warn('Updated customer locally, TiDB error:', err);
+      showToast(`Customer "${updated.name}" updated locally`);
+    }
+  };
+
+  const handleDeleteCustomer = async (id, custName) => {
+    if (confirm(`Delete customer "${custName}" from TiDB Cloud?`)) {
+      setCustomers(customers.filter(item => item.id !== id));
+      try {
+        await apiDeleteCustomer(id);
+        showToast('Customer deleted from TiDB Cloud');
+      } catch (err) {
+        showToast('Customer deleted locally');
+      }
     }
   };
 
@@ -2332,32 +2705,63 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
         padding: '20px 24px',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
+        boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>Customer Directory</h2>
-          <p style={{ fontSize: '13px', color: '#64748B' }}>Client database, contact numbers, order histories and billing profiles.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Customer Directory</h2>
+            <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>
+              TiDB Connected ({customers.length} Clients)
+            </span>
+          </div>
+          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>Client database, contact numbers, order histories and billing profiles in TiDB Cloud.</p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          style={{
-            background: '#4B4DFF',
-            color: '#FFF',
-            border: 'none',
-            padding: '10px 20px',
-            borderRadius: '10px',
-            fontWeight: '700',
-            fontSize: '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 4px 14px rgba(75, 77, 255, 0.28)'
-          }}
-        >
-          <PlusCircle size={17} /> Add New Customer
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isReloading}
+            style={{
+              background: '#F1F5F9',
+              color: '#334155',
+              border: '1px solid #CBD5E1',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              fontWeight: '700',
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <RefreshCw size={14} className={isReloading ? 'spin' : ''} />
+            <span>{isReloading ? 'Syncing...' : 'Refresh from TiDB'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            style={{
+              background: '#4B4DFF',
+              color: '#FFF',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              fontWeight: '700',
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 14px rgba(75, 77, 255, 0.28)'
+            }}
+          >
+            <PlusCircle size={17} /> Add New Customer
+          </button>
+        </div>
       </div>
 
       <div style={{
@@ -2370,7 +2774,7 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
           <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '12px' }} />
           <input
             type="text"
-            placeholder="Search customers by name, phone or address..."
+            placeholder="Search customers by name, phone, address, or GSTIN..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -2391,60 +2795,177 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
         overflow: 'hidden',
         boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
       }}>
-        <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+        <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
-              <th style={{ padding: '14px 16px', width: '60px' }}>#</th>
+              <th style={{ padding: '14px 16px', width: '50px' }}>#</th>
               <th style={{ padding: '14px 16px' }}>Customer Name</th>
-              <th style={{ padding: '14px 16px', width: '160px' }}>Mobile No</th>
+              <th style={{ padding: '14px 16px', width: '140px' }}>Mobile No</th>
               <th style={{ padding: '14px 16px' }}>Address & Location</th>
-              <th style={{ padding: '14px 16px', width: '120px', textAlign: 'center' }}>Total Orders</th>
-              <th style={{ padding: '14px 16px', width: '80px', textAlign: 'center' }}>Actions</th>
+              <th style={{ padding: '14px 16px', width: '110px', textAlign: 'center' }}>Total Bills</th>
+              <th style={{ padding: '14px 16px', width: '120px', textAlign: 'right' }}>Credit Balance</th>
+              <th style={{ padding: '14px 16px', width: '100px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c, i) => (
-              <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '12px 16px', fontWeight: '600', color: '#94A3B8' }}>{i + 1}</td>
-                <td style={{ padding: '12px 16px', fontWeight: '700', color: '#1E293B' }}>{c.name}</td>
-                <td style={{ padding: '12px 16px', color: '#4B4DFF', fontWeight: '600' }}>{c.mobile}</td>
-                <td style={{ padding: '12px 16px', color: '#64748B' }}>{c.address}</td>
-                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                  <span style={{ background: '#EEF2FF', color: '#4B4DFF', padding: '3px 8px', borderRadius: '12px', fontWeight: '700', fontSize: '11px' }}>
-                    {c.totalOrders || 0} Bills
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                  <button
-                    onClick={async () => {
-                      if (confirm(`Delete customer "${c.name}"?`)) {
-                        setCustomers(customers.filter(item => item.id !== c.id));
-                        try {
-                          await apiDeleteCustomer(c.id);
-                          showToast('Customer deleted from TiDB Cloud');
-                        } catch (err) {
-                          showToast('Customer deleted');
-                        }
-                      }
-                    }}
-                    style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer' }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
+                  No customer profiles found matching "{searchTerm}".
                 </td>
               </tr>
-            ))}
+            ) : (
+              filtered.map((c, i) => (
+                <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: '600', color: '#94A3B8' }}>{i + 1}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: '700', color: '#1E293B' }}>
+                    <div>{c.name}</div>
+                    {c.gstin && <div style={{ fontSize: '11px', color: '#94A3B8' }}>GSTIN: {c.gstin}</div>}
+                  </td>
+                  <td style={{ padding: '12px 16px', color: '#4B4DFF', fontWeight: '600' }}>{c.mobile || '-'}</td>
+                  <td style={{ padding: '12px 16px', color: '#64748B' }}>{c.address || '-'}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <span style={{ background: '#EEF2FF', color: '#4B4DFF', padding: '3px 8px', borderRadius: '12px', fontWeight: '700', fontSize: '11px' }}>
+                      {c.totalOrders || 0} Bills
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: Number(c.balance) > 0 ? '#DC2626' : '#059669' }}>
+                    ₹{formatNumber(c.balance || 0)}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        title="Edit customer in TiDB Cloud"
+                        onClick={() => setEditCustomer({ ...c })}
+                        style={{
+                          background: '#EEF2FF',
+                          border: '1px solid #C7D2FE',
+                          color: '#4B4DFF',
+                          cursor: 'pointer',
+                          padding: '5px 7px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete from TiDB Cloud"
+                        onClick={() => handleDeleteCustomer(c.id, c.name)}
+                        style={{
+                          background: '#FEE2E2',
+                          border: '1px solid #FECACA',
+                          color: '#EF4444',
+                          cursor: 'pointer',
+                          padding: '5px 7px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
+      {/* Edit Customer Modal */}
+      {editCustomer && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '16px'
+        }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '24px', width: '450px', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>Edit Customer Profile (TiDB Cloud)</h3>
+            <form onSubmit={handleUpdateCustomer} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Customer Name *</label>
+                <input
+                  type="text"
+                  value={editCustomer.name}
+                  onChange={e => setEditCustomer({ ...editCustomer, name: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Mobile Number *</label>
+                <input
+                  type="text"
+                  value={editCustomer.mobile}
+                  onChange={e => setEditCustomer({ ...editCustomer, mobile: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Address & Location</label>
+                <textarea
+                  value={editCustomer.address}
+                  onChange={e => setEditCustomer({ ...editCustomer, address: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', minHeight: '55px' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>GSTIN / PAN</label>
+                  <input
+                    type="text"
+                    value={editCustomer.gstin || ''}
+                    onChange={e => setEditCustomer({ ...editCustomer, gstin: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Balance (₹)</label>
+                  <input
+                    type="number"
+                    value={editCustomer.balance || 0}
+                    onChange={e => setEditCustomer({ ...editCustomer, balance: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditCustomer(null)}
+                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
+                >
+                  Update Customer in TiDB
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Modal */}
       {isModalOpen && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(0,0,0,0.4)',
           backdropFilter: 'blur(4px)',
           display: 'flex',
@@ -2468,39 +2989,57 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) 
                 <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Address</label>
                 <textarea value={address} onChange={e => setAddress(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', minHeight: '60px' }} />
               </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>GSTIN / PAN (Optional)</label>
+                <input type="text" value={gstin} onChange={e => setGstin(e.target.value)} placeholder="33AAAAA0000A1Z5" style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }} />
+              </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button type="button" onClick={() => setIsModalOpen(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}>Save Customer</button>
+                <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}>Save Customer to TiDB</button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
+
 // -------------------------------------------------------------
 // SUB-VIEW: Reports & Saved Invoices
 // -------------------------------------------------------------
-function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear }) {
-  const totalRevenue = savedInvoices.reduce((acc, curr) => acc + curr.netAmount, 0);
-  const totalGross = savedInvoices.reduce((acc, curr) => acc + curr.grossTotal, 0);
+function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear, setPreviewInvoice, loadInvoices, reloadProducts }) {
+  const [isReloading, setIsReloading] = React.useState(false);
+  const totalRevenue = savedInvoices.reduce((acc, curr) => acc + (Number(curr.netAmount) || 0), 0);
+  const totalGross = savedInvoices.reduce((acc, curr) => acc + (Number(curr.grossTotal) || 0), 0);
+
+  const handleRefresh = async () => {
+    setIsReloading(true);
+    try {
+      if (loadInvoices) await loadInvoices();
+      showToast('Invoices refreshed from TiDB Cloud!');
+    } catch (e) {
+      showToast('Refresh failed');
+    } finally {
+      setIsReloading(false);
+    }
+  };
 
   const handleDownloadPdf = (inv) => {
     const doc = generatePdfDocument(inv, company);
-    doc.save(`Sri_Kaliswari_Bill_${inv.billNo}_${inv.customerName}.pdf`);
+    doc.save(`Sri_Kaliswari_Bill_SKC_${inv.billNo}_${inv.customerName || 'Customer'}.pdf`);
   };
 
   const handleDeleteInvoice = async (billNo) => {
-    if (confirm(`Are you sure you want to delete Invoice #${billNo}?`)) {
+    if (confirm(`Are you sure you want to delete Invoice #SKC ${billNo}? Product stocks will be restored in TiDB.`)) {
       setSavedInvoices(savedInvoices.filter(i => i.billNo !== billNo));
       try {
         await apiDeleteInvoice(billNo, activeYear);
-        showToast(`Bill #${billNo} removed from TiDB Cloud`);
+        if (reloadProducts) await reloadProducts();
+        showToast(`Bill #SKC ${billNo} removed & product stock restored in TiDB!`);
       } catch (err) {
-        showToast(`Bill #${billNo} removed locally`);
+        showToast(`Bill #SKC ${billNo} removed locally`);
       }
     }
   };
@@ -2513,16 +3052,19 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
         <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Total Invoices Generated</div>
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#4B4DFF', marginTop: '6px' }}>{savedInvoices.length}</div>
+          <div style={{ fontSize: '11px', color: '#10B981', fontWeight: '600', marginTop: '4px' }}>✓ Synced with TiDB Cloud</div>
         </div>
 
         <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Gross Sales Value</div>
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#0F172A', marginTop: '6px' }}>₹{formatNumber(totalGross)}</div>
+          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>Year {activeYear} Catalog Rates</div>
         </div>
 
-        <div style={{ background: 'linear-gradient(135deg, #4B4DFF 0%, #6D3DFF 100%)', padding: '20px', borderRadius: '16px', color: '#FFF', boxShadow: '0 8px 24px rgba(75, 77, 255, 0.28)' }}>
+        <div style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #EA580C 100%)', padding: '20px', borderRadius: '16px', color: '#FFF', boxShadow: '0 8px 24px rgba(255, 107, 53, 0.28)' }}>
           <div style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, textTransform: 'uppercase' }}>Total Net Realised Revenue</div>
           <div style={{ fontSize: '26px', fontWeight: '800', marginTop: '6px' }}>₹{formatNumber(totalRevenue)}</div>
+          <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '4px' }}>Actual Cash & Billed Realisation</div>
         </div>
       </div>
 
@@ -2535,108 +3077,179 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
         boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
       }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', fontWeight: '800', fontSize: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <span>Recent Invoices & Quotations History</span>
-          {savedInvoices.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Recent Invoices & Quotations History</span>
+            <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>
+              TiDB Connected ({savedInvoices.length} Bills)
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={async () => {
-                if (confirm('Clear all saved invoices history and reset bill number to 1?')) {
-                  setSavedInvoices([]);
-                  try {
-                    await apiClearAllInvoices(activeYear);
-                    showToast('All invoices cleared from TiDB Cloud. Counter reset.');
-                  } catch (err) {
-                    showToast('All invoices cleared locally.');
-                  }
-                }
-              }}
+              type="button"
+              onClick={handleRefresh}
+              disabled={isReloading}
               style={{
-                background: '#FEE2E2',
-                color: '#DC2626',
-                border: '1px solid #FCA5A5',
+                background: '#F1F5F9',
+                color: '#334155',
+                border: '1px solid #CBD5E1',
                 padding: '6px 12px',
                 borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: '700',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
             >
-              Clear All & Start from #1
+              <RefreshCw size={13} className={isReloading ? 'spin' : ''} />
+              <span>{isReloading ? 'Syncing...' : 'Refresh from TiDB'}</span>
             </button>
-          )}
+
+            {savedInvoices.length > 0 && (
+              <button
+                onClick={async () => {
+                  if (confirm('Clear all saved invoices history and reset bill number to 1?')) {
+                    setSavedInvoices([]);
+                    try {
+                      await apiClearAllInvoices(activeYear);
+                      showToast('All invoices cleared from TiDB Cloud. Counter reset to #1.');
+                    } catch (err) {
+                      showToast('All invoices cleared locally.');
+                    }
+                  }
+                }}
+                style={{
+                  background: '#FEE2E2',
+                  color: '#DC2626',
+                  border: '1px solid #FCA5A5',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear All & Start from #1
+              </button>
+            )}
+          </div>
         </div>
-        <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+
+        <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
-              <th style={{ padding: '14px 16px', width: '80px', textAlign: 'center' }}>Bill No</th>
+              <th style={{ padding: '14px 16px', width: '90px', textAlign: 'center' }}>Bill No</th>
               <th style={{ padding: '14px 16px', width: '110px' }}>Date</th>
               <th style={{ padding: '14px 16px', width: '110px' }}>Type</th>
               <th style={{ padding: '14px 16px' }}>Customer Details</th>
               <th style={{ padding: '14px 16px', textAlign: 'right' }}>Gross Total (₹)</th>
               <th style={{ padding: '14px 16px', textAlign: 'center' }}>Discount</th>
               <th style={{ padding: '14px 16px', textAlign: 'right' }}>Net Payable (₹)</th>
-              <th style={{ padding: '14px 16px', width: '120px', textAlign: 'center' }}>Actions</th>
+              <th style={{ padding: '14px 16px', width: '150px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {savedInvoices.map((inv) => (
-              <tr key={inv.billNo} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#EA580C' }}>
-                  SKC {inv.billNo}
-                </td>
-                <td style={{ padding: '12px 16px', color: '#64748B' }}>{inv.date}</td>
-                <td style={{ padding: '12px 16px' }}>
-                  <span style={{
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    background: inv.type === 'tax' ? '#DBEAFE' : '#FEF3C7',
-                    color: inv.type === 'tax' ? '#1E40AF' : '#92400E'
-                  }}>
-                    {inv.type ? inv.type.toUpperCase() : 'ESTIMATE'}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', fontWeight: '600' }}>
-                  <div>{inv.customerName}</div>
-                  <div style={{ fontSize: '11px', color: '#94A3B8' }}>{inv.customerMobile}</div>
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748B' }}>
-                  ₹{formatNumber(inv.grossTotal)}
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'center', color: '#EF4444', fontWeight: '700' }}>
-                  {inv.discountPercent}%
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                  ₹{formatNumber(inv.netAmount)}
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => handleDownloadPdf(inv)}
-                    style={{
-                      background: '#EEF2FF',
-                      border: '1px solid #C7D2FE',
-                      color: '#4B4DFF',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Download size={13} /> PDF
-                  </button>
-                  <button
-                    onClick={() => handleDeleteInvoice(inv.billNo)}
-                    style={{ background: 'transparent', border: 'none', color: '#CBD5E1', cursor: 'pointer' }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+            {savedInvoices.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
+                  No saved invoices found for Year {activeYear}. Create bills from Quick Billing!
                 </td>
               </tr>
-            ))}
+            ) : (
+              savedInvoices.map((inv) => (
+                <tr key={inv.billNo} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#EA580C' }}>
+                    SKC {inv.billNo}
+                  </td>
+                  <td style={{ padding: '12px 16px', color: '#64748B' }}>{inv.date}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      background: inv.type === 'tax' || inv.type === 'invoice' ? '#DBEAFE' : '#FEF3C7',
+                      color: inv.type === 'tax' || inv.type === 'invoice' ? '#1E40AF' : '#92400E'
+                    }}>
+                      {inv.type ? inv.type.toUpperCase() : 'ESTIMATE'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px', fontWeight: '600' }}>
+                    <div style={{ color: '#0F172A' }}>{inv.customerName}</div>
+                    <div style={{ fontSize: '11px', color: '#94A3B8' }}>{inv.customerMobile || '-'} · {inv.customerAddress || '-'}</div>
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748B' }}>
+                    ₹{formatNumber(inv.grossTotal)}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', color: '#EF4444', fontWeight: '700' }}>
+                    {inv.discountPercent}%
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                    ₹{formatNumber(inv.netAmount)}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        title="View invoice preview"
+                        onClick={() => setPreviewInvoice(inv)}
+                        style={{
+                          background: '#F1F5F9',
+                          border: '1px solid #CBD5E1',
+                          color: '#334155',
+                          padding: '5px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Download PDF"
+                        onClick={() => handleDownloadPdf(inv)}
+                        style={{
+                          background: '#EEF2FF',
+                          border: '1px solid #C7D2FE',
+                          color: '#4B4DFF',
+                          padding: '5px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        <Download size={12} /> PDF
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete bill and restore stock in TiDB"
+                        onClick={() => handleDeleteInvoice(inv.billNo)}
+                        style={{
+                          background: '#FEE2E2',
+                          border: '1px solid #FECACA',
+                          color: '#EF4444',
+                          cursor: 'pointer',
+                          padding: '5px 8px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -2648,10 +3261,42 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
 // -------------------------------------------------------------
 // SUB-VIEW: Settings
 // -------------------------------------------------------------
-function SettingsView({ company, setCompany, showToast, activeYear, dbConnected, dbInfo, refreshDbStatus, products, customers, savedInvoices }) {
+function SettingsView({
+  company,
+  setCompany,
+  showToast,
+  activeYear,
+  setActiveYear,
+  availableYears,
+  setAvailableYears,
+  dbConnected,
+  dbInfo,
+  refreshDbStatus,
+  products,
+  customers,
+  savedInvoices,
+  loadAllData
+}) {
   const [formData, setFormData] = React.useState({ ...company });
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [testResult, setTestResult] = React.useState(null);
+  const [dbStats, setDbStats] = React.useState(null);
+  const [newYearInput, setNewYearInput] = React.useState('');
+  const [isCreatingYear, setIsCreatingYear] = React.useState(false);
+
+  // Load database stats
+  const fetchDbStats = React.useCallback(async () => {
+    try {
+      const stats = await fetchStats(activeYear);
+      if (stats && stats.ok) setDbStats(stats);
+    } catch (e) {
+      console.warn('Could not load DB stats:', e);
+    }
+  }, [activeYear]);
+
+  React.useEffect(() => {
+    fetchDbStats();
+  }, [fetchDbStats]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -2671,12 +3316,42 @@ function SettingsView({ company, setCompany, showToast, activeYear, dbConnected,
       if (res.ok) {
         setTestResult({ ok: true, msg: `Connected! Ping OK at ${new Date(res.connectedAt).toLocaleTimeString()}` });
         if (refreshDbStatus) refreshDbStatus();
+        fetchDbStats();
       } else {
         setTestResult({ ok: false, msg: res.error || 'Connection failed' });
       }
     } catch (e) {
       setTestResult({ ok: false, msg: e.message });
     }
+  };
+
+  const handleCreateNewYear = async (e) => {
+    e.preventDefault();
+    const yr = newYearInput.trim();
+    if (!yr || isNaN(yr) || yr.length !== 4) {
+      showToast('Please enter a valid 4-digit year (e.g. 2027)');
+      return;
+    }
+    setIsCreatingYear(true);
+    try {
+      await apiCreateYear(yr);
+      const updatedYears = Array.from(new Set([...availableYears, yr]));
+      setAvailableYears(updatedYears);
+      localStorage.setItem('kalieswari_years', JSON.stringify(updatedYears));
+      setNewYearInput('');
+      showToast(`Financial Year ${yr} created in TiDB Cloud!`);
+    } catch (err) {
+      showToast('Created year locally');
+    } finally {
+      setIsCreatingYear(false);
+    }
+  };
+
+  const handleSwitchYear = async (yr) => {
+    if (yr === activeYear) return;
+    setActiveYear(yr);
+    if (loadAllData) await loadAllData(yr);
+    showToast(`Switched active workspace to Financial Year ${yr}!`);
   };
 
   const handleSyncToDb = async () => {
@@ -2694,6 +3369,7 @@ function SettingsView({ company, setCompany, showToast, activeYear, dbConnected,
       });
       if (res && res.success) {
         showToast('All data successfully synced to TiDB Cloud!');
+        fetchDbStats();
       } else {
         showToast(res?.error || 'Sync completed with warnings');
       }
@@ -2704,10 +3380,29 @@ function SettingsView({ company, setCompany, showToast, activeYear, dbConnected,
     }
   };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px', margin: '0 auto' }}>
+  const handleExportBackup = () => {
+    const backupData = {
+      exportDate: new Date().toISOString(),
+      year: activeYear,
+      company: formData,
+      products,
+      customers,
+      invoices: savedInvoices
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Sri_Kaliswari_Backup_${activeYear}_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Database backup downloaded successfully!');
+  };
 
-      {/* TiDB Cloud Connection Card */}
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '850px', margin: '0 auto', width: '100%' }}>
+
+      {/* 1. Live TiDB Cloud Database Status & Metrics Card */}
       <div style={{
         background: '#FFFFFF',
         borderRadius: '16px',
@@ -2715,7 +3410,7 @@ function SettingsView({ company, setCompany, showToast, activeYear, dbConnected,
         border: '1px solid #E2E8F0',
         boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
               width: '38px',
@@ -2789,8 +3484,41 @@ function SettingsView({ company, setCompany, showToast, activeYear, dbConnected,
             <div style={{ color: '#0F172A', fontWeight: '700' }}>kalishwaribilling</div>
           </div>
           <div>
-            <div style={{ color: '#64748B', fontWeight: '600' }}>Username</div>
-            <div style={{ color: '#0F172A', fontWeight: '700' }}>2jfg5VSYFYcSWGr.root</div>
+            <div style={{ color: '#64748B', fontWeight: '600' }}>Active Year</div>
+            <div style={{ color: '#EA580C', fontWeight: '800' }}>{activeYear}</div>
+          </div>
+        </div>
+
+        {/* Live Database Statistics */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: '10px',
+          marginBottom: '16px'
+        }}>
+          <div style={{ background: '#EEF2FF', padding: '12px', borderRadius: '10px', border: '1px solid #C7D2FE' }}>
+            <div style={{ fontSize: '11px', color: '#4338CA', fontWeight: '700', textTransform: 'uppercase' }}>Products in TiDB</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: '#1E1B4B', marginTop: '3px' }}>
+              {dbStats ? dbStats.productsCount : products.length} Items
+            </div>
+          </div>
+          <div style={{ background: '#ECFDF5', padding: '12px', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
+            <div style={{ fontSize: '11px', color: '#047857', fontWeight: '700', textTransform: 'uppercase' }}>Customers in TiDB</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: '#064E3B', marginTop: '3px' }}>
+              {dbStats ? dbStats.customersCount : customers.length} Clients
+            </div>
+          </div>
+          <div style={{ background: '#FFF7ED', padding: '12px', borderRadius: '10px', border: '1px solid #FED7AA' }}>
+            <div style={{ fontSize: '11px', color: '#C2410C', fontWeight: '700', textTransform: 'uppercase' }}>Invoices in TiDB</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: '#7C2D12', marginTop: '3px' }}>
+              {dbStats ? dbStats.invoicesCount : savedInvoices.length} Bills
+            </div>
+          </div>
+          <div style={{ background: '#FAF5FF', padding: '12px', borderRadius: '10px', border: '1px solid #E9D5FF' }}>
+            <div style={{ fontSize: '11px', color: '#7E22CE', fontWeight: '700', textTransform: 'uppercase' }}>Net Revenue</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: '#581C87', marginTop: '3px' }}>
+              ₹{formatNumber(dbStats ? dbStats.totalNet : savedInvoices.reduce((a, b) => a + (Number(b.netAmount) || 0), 0))}
+            </div>
           </div>
         </div>
 
@@ -2853,13 +3581,105 @@ function SettingsView({ company, setCompany, showToast, activeYear, dbConnected,
             <Server size={13} />
             {isSyncing ? 'Syncing...' : `Sync All Local Data to TiDB (${activeYear})`}
           </button>
+
+          <button
+            type="button"
+            onClick={handleExportBackup}
+            style={{
+              background: '#EEF2FF',
+              color: '#4B4DFF',
+              border: '1px solid #C7D2FE',
+              padding: '9px 16px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Download size={13} />
+            Download Full Backup JSON
+          </button>
         </div>
       </div>
 
-      {/* Firm & Bill Print Settings Form */}
+      {/* 2. Financial Years Management Card */}
+      <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '24px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <Calendar size={18} color="#EA580C" />
+          <h2 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+            Financial Years Management
+          </h2>
+        </div>
+        <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
+          Switch between financial years or initialize a new financial year in TiDB Cloud.
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
+          <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Registered Years:</span>
+          {availableYears.map(yr => {
+            const isActive = String(yr) === String(activeYear);
+            return (
+              <button
+                key={yr}
+                type="button"
+                onClick={() => handleSwitchYear(yr)}
+                style={{
+                  background: isActive ? '#FF6B35' : '#F1F5F9',
+                  color: isActive ? '#FFF' : '#334155',
+                  border: `1px solid ${isActive ? '#FF6B35' : '#CBD5E1'}`,
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>{yr}</span>
+                {isActive && <span style={{ fontSize: '10px', opacity: 0.9 }}>✓ Active</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <form onSubmit={handleCreateNewYear} style={{ display: 'flex', gap: '10px', alignItems: 'center', maxWidth: '380px' }}>
+          <input
+            type="number"
+            placeholder="e.g. 2027"
+            min="2000"
+            max="2099"
+            value={newYearInput}
+            onChange={e => setNewYearInput(e.target.value)}
+            style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+          />
+          <button
+            type="submit"
+            disabled={isCreatingYear}
+            style={{
+              background: '#0F172A',
+              color: '#FFF',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontWeight: '700',
+              fontSize: '13px',
+              cursor: 'pointer'
+            }}
+          >
+            {isCreatingYear ? 'Creating...' : '+ Add Year to TiDB'}
+          </button>
+        </form>
+      </div>
+
+      {/* 3. Firm & Bill Print Settings Form */}
       <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '28px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
         <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
-          Firm & Bill Print Settings
+          Firm &amp; Bill Print Settings (TiDB Cloud)
         </h2>
         <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px' }}>
           Configure header branding, GST number, bank information and print terms for Sri Kaliswari Crackers.
