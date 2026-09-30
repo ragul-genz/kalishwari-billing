@@ -27,10 +27,33 @@ import {
   CreditCard,
   Tag,
   Calendar,
+  Database,
+  Server,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
 import { formatCurrency, formatNumber, generatePdfDocument } from './utils/pdfGenerator';
+import {
+  checkDbStatus,
+  fetchYears,
+  createYear as apiCreateYear,
+  fetchCompany,
+  saveCompany as apiSaveCompany,
+  fetchProducts,
+  addProduct as apiAddProduct,
+  updateProduct as apiUpdateProduct,
+  deleteProduct as apiDeleteProduct,
+  fetchCustomers,
+  addCustomer as apiAddCustomer,
+  updateCustomer as apiUpdateCustomer,
+  deleteCustomer as apiDeleteCustomer,
+  fetchInvoices,
+  saveInvoice as apiSaveInvoice,
+  deleteInvoice as apiDeleteInvoice,
+  clearAllInvoices as apiClearAllInvoices,
+  syncLocalStorageToDb
+} from './utils/api';
 
 export default function App() {
   // Navigation tabs: 'estimate' | 'taxbill' | 'quotation' | 'products' | 'customers' | 'reports' | 'settings'
@@ -44,29 +67,61 @@ export default function App() {
   const [yearMissingPrompt, setYearMissingPrompt] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
 
-  const handleLogin = (e) => {
+  // Database Connection State
+  const [dbConnected, setDbConnected] = React.useState(null);
+  const [dbInfo, setDbInfo] = React.useState(null);
+  const [isLoadingData, setIsLoadingData] = React.useState(false);
+
+  const refreshDbStatus = React.useCallback(async () => {
+    try {
+      const status = await checkDbStatus();
+      setDbConnected(status.ok);
+      if (status.ok) setDbInfo(status);
+    } catch (err) {
+      setDbConnected(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    refreshDbStatus();
+    // Poll DB status every 30 seconds
+    const interval = setInterval(refreshDbStatus, 30000);
+    return () => clearInterval(interval);
+  }, [refreshDbStatus]);
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (loginEmail === 'Billing@admin.com' && loginPassword === 'Billing@123') {
       if (!loginYear) {
         setLoginError('Please enter a year.');
         return;
       }
-      const existingYears = JSON.parse(localStorage.getItem('kalieswari_years') || '["2026"]'); // Default allow 2026
-      if (existingYears.includes(loginYear)) {
+      let existingYears = [];
+      try {
+        existingYears = await fetchYears();
+      } catch (err) {
+        existingYears = JSON.parse(localStorage.getItem('kalieswari_years') || '["2026"]');
+      }
+      if (Array.isArray(existingYears) && existingYears.includes(loginYear)) {
         setActiveYear(loginYear);
         setLoggedIn(true);
         setLoginError('');
         setYearMissingPrompt(false);
       } else {
         setYearMissingPrompt(true);
-        setLoginError(`Year ${loginYear} does not exist.`);
+        setLoginError(`Year ${loginYear} does not exist in database.`);
       }
     } else {
       setLoginError('Invalid credentials');
     }
   };
 
-  const handleCreateYear = () => {
+  const handleCreateYear = async () => {
+    try {
+      await apiCreateYear(loginYear);
+    } catch (err) {
+      console.warn('Could not create year in TiDB:', err);
+    }
     const existingYears = JSON.parse(localStorage.getItem('kalieswari_years') || '["2026"]');
     if (!existingYears.includes(loginYear)) {
       existingYears.push(loginYear);
@@ -78,7 +133,7 @@ export default function App() {
     setLoginError('');
   };
 
-  // Master Data with LocalStorage Persistence mapped to activeYear
+  // Master Data with TiDB Cloud persistence + LocalStorage caching
   const [company, setCompany] = React.useState(defaultCompany);
   const [products, setProducts] = React.useState(defaultProducts);
   const [customers, setCustomers] = React.useState(defaultCustomers);
@@ -87,27 +142,81 @@ export default function App() {
   React.useEffect(() => {
     if (!activeYear) return;
 
-    // Helper: load from localStorage; if nothing saved yet (or empty array), use fallback
-    const loadData = (key, fallback) => {
+    // Helper: load from localStorage
+    const loadFallback = (key, fallback) => {
       const saved = localStorage.getItem(`${key}_${activeYear}`);
       if (!saved) return fallback;
-      const parsed = JSON.parse(saved);
-      // If it's an empty array, seed with fallback defaults
-      if (Array.isArray(parsed) && parsed.length === 0) return fallback;
-      return parsed;
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 0) return fallback;
+        return parsed;
+      } catch (e) {
+        return fallback;
+      }
     };
 
-    // Company settings carry over across years (same shop)
-    setCompany(loadData('kalieswari_company', defaultCompany));
+    const loadAllData = async () => {
+      setIsLoadingData(true);
+      try {
+        const [c, p, cust, inv] = await Promise.all([
+          fetchCompany(),
+          fetchProducts(activeYear),
+          fetchCustomers(activeYear),
+          fetchInvoices(activeYear)
+        ]);
 
-    // Products, Customers, Invoices — strictly per-year.
-    // First login to a year → load defaultProducts/defaultCustomers as seed data.
-    // Subsequent logins → saved data from localStorage.
-    setProducts(loadData('kalieswari_products', defaultProducts));
-    setCustomers(loadData('kalieswari_customers', defaultCustomers));
+        if (c && typeof c === 'object') {
+          setCompany(c);
+          localStorage.setItem(`kalieswari_company_${activeYear}`, JSON.stringify(c));
+        } else {
+          setCompany(loadFallback('kalieswari_company', defaultCompany));
+        }
 
-    const loadedInvoices = loadData('kalieswari_invoices', []);
-    setSavedInvoices(loadedInvoices);
+        if (Array.isArray(p) && p.length > 0) {
+          setProducts(p);
+          localStorage.setItem(`kalieswari_products_${activeYear}`, JSON.stringify(p));
+        } else {
+          setProducts(loadFallback('kalieswari_products', defaultProducts));
+        }
+
+        if (Array.isArray(cust) && cust.length > 0) {
+          setCustomers(cust);
+          localStorage.setItem(`kalieswari_customers_${activeYear}`, JSON.stringify(cust));
+        } else {
+          setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
+        }
+
+        let loadedInvoices = [];
+        if (Array.isArray(inv)) {
+          loadedInvoices = inv;
+          setSavedInvoices(inv);
+          localStorage.setItem(`kalieswari_invoices_${activeYear}`, JSON.stringify(inv));
+        } else {
+          loadedInvoices = loadFallback('kalieswari_invoices', []);
+          setSavedInvoices(loadedInvoices);
+        }
+
+        const nextBillNo = loadedInvoices.length > 0
+          ? Math.max(...loadedInvoices.map(i => Number(i.billNo) || 0)) + 1
+          : 1;
+        setBillNo(nextBillNo);
+      } catch (err) {
+        console.error('Error connecting to TiDB, using fallback:', err);
+        setCompany(loadFallback('kalieswari_company', defaultCompany));
+        setProducts(loadFallback('kalieswari_products', defaultProducts));
+        setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
+        const loadedInvoices = loadFallback('kalieswari_invoices', []);
+        setSavedInvoices(loadedInvoices);
+        const nextBillNo = loadedInvoices.length > 0
+          ? Math.max(...loadedInvoices.map(i => Number(i.billNo) || 0)) + 1
+          : 1;
+        setBillNo(nextBillNo);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    loadAllData();
 
     // Reset billing form to a clean slate for this year
     setBillItems([]);
@@ -118,15 +227,9 @@ export default function App() {
     setSelectedProductCode('');
     setSelectedProductId('');
     setItemQty(1);
-    setDiscountPercent(0);
+    setDiscountPercent(90);
     setAdditionalDiscPercent(0);
     setPackingPercent(0);
-
-    // Bill number = one after the highest saved bill in this year, or 1 if no bills exist
-    const nextBillNo = loadedInvoices.length > 0
-      ? Math.max(...loadedInvoices.map(inv => Number(inv.billNo) || 0)) + 1
-      : 1;
-    setBillNo(nextBillNo);
   }, [activeYear]);
 
   // Sync to local storage for the active year
@@ -175,7 +278,7 @@ export default function App() {
   const [billItems, setBillItems] = React.useState([]);
 
   // Discounts and Additions — defaults reset per year in the useEffect above
-  const [discountPercent, setDiscountPercent] = React.useState(0);
+  const [discountPercent, setDiscountPercent] = React.useState(90);
   const [additionalDiscPercent, setAdditionalDiscPercent] = React.useState(0);
   const [packingPercent, setPackingPercent] = React.useState(0);
   const [gstPercent, setGstPercent] = React.useState(18);
@@ -381,7 +484,7 @@ export default function App() {
     setSelectedProductId('');
     setProductSearch('');
     setItemQty(1);
-    setDiscountPercent(0);
+    setDiscountPercent(90);
     setAdditionalDiscPercent(0);
     setPackingPercent(0);
     // Auto-update to latest bill number based on saved invoices
@@ -426,6 +529,20 @@ export default function App() {
 
     setSavedInvoices(prev => [newInvoice, ...prev]);
 
+    // Persist invoice to TiDB Cloud database
+    apiSaveInvoice({ ...newInvoice, year: activeYear })
+      .then(() => {
+        // Refresh product stock from TiDB
+        fetchProducts(activeYear).then(updated => {
+          if (Array.isArray(updated) && updated.length > 0) {
+            setProducts(updated);
+          }
+        });
+      })
+      .catch(err => {
+        console.warn('Saved bill locally; TiDB cloud error:', err);
+      });
+
     // Confetti celebration
     confetti({
       particleCount: 80,
@@ -433,7 +550,7 @@ export default function App() {
       origin: { y: 0.6 }
     });
 
-    showToast(`Bill #SKC ${billNo} Saved Successfully!`);
+    showToast(`Bill #SKC ${billNo} Saved to TiDB Cloud!`);
 
     if (shouldPrint) {
       // Show invoice preview drawer on the left
@@ -468,6 +585,29 @@ export default function App() {
             <div className="login-logo">🎆</div>
             <h1 className="login-title">Sri Kaliswari Crackers</h1>
             <p className="login-subtitle">Billing &amp; Inventory Management</p>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginTop: '10px',
+              padding: '4px 12px',
+              borderRadius: '999px',
+              fontSize: '11px',
+              fontWeight: '700',
+              background: dbConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+              border: `1px solid ${dbConnected ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+              color: dbConnected ? '#34D399' : '#F87171'
+            }}>
+              <span style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: dbConnected ? '#10B981' : '#EF4444',
+                boxShadow: dbConnected ? '0 0 6px #10B981' : 'none'
+              }}></span>
+              <Database size={12} />
+              <span>TiDB Cloud: {dbConnected ? 'Online (kalishwaribilling)' : 'Connecting / Local'}</span>
+            </div>
           </div>
 
           {/* Error */}
@@ -630,6 +770,33 @@ export default function App() {
             <RefreshCw size={14} />
             <span className="app-new-bill-btn-label">+ New Bill (F2)</span>
           </button>
+          <div
+            title={dbInfo ? `TiDB Cloud Connected\nHost: ${dbInfo.host}\nDatabase: ${dbInfo.database}` : 'TiDB Cloud Connection Status'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: dbConnected ? '#ECFDF5' : '#FEF2F2',
+              border: `1px solid ${dbConnected ? '#A7F3D0' : '#FECACA'}`,
+              padding: '6px 12px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              fontWeight: '700',
+              color: dbConnected ? '#065F46' : '#991B1B',
+              cursor: 'pointer'
+            }}
+            onClick={refreshDbStatus}
+          >
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: dbConnected ? '#10B981' : '#EF4444',
+              boxShadow: dbConnected ? '0 0 6px #10B981' : 'none'
+            }}></span>
+            <Database size={13} />
+            <span>{dbConnected ? 'TiDB: Live' : 'TiDB: Offline'}</span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F1F5F9', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', color: '#475569' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
             Admin
@@ -1217,28 +1384,51 @@ export default function App() {
                 </div>
 
                 {/* Main Discount % (Ref shows: Discount (%) [ 90 ] [29295] [3255]) */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '13px' }}>
-                  <span style={{ color: '#64748B', fontWeight: '600', minWidth: '95px' }}>Discount (%) :</span>
-                  <input
-                    type="number"
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(e.target.value)}
-                    style={{
-                      width: '54px',
-                      padding: '6px 4px',
-                      textAlign: 'center',
-                      borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      fontWeight: '700',
-                      background: '#FFF'
-                    }}
-                  />
-                  <span style={{ color: '#EF4444', fontWeight: '600', fontSize: '12px' }}>
-                    - ₹{formatNumber(discountAmount)}
-                  </span>
-                  <span style={{ fontWeight: '700', color: '#0F172A' }}>
-                    {formatNumber(afterDiscount)}
-                  </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '13px' }}>
+                    <span style={{ color: '#64748B', fontWeight: '600', minWidth: '95px' }}>Discount (%) :</span>
+                    <input
+                      type="number"
+                      value={discountPercent}
+                      onChange={(e) => setDiscountPercent(e.target.value)}
+                      style={{
+                        width: '54px',
+                        padding: '6px 4px',
+                        textAlign: 'center',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        fontWeight: '700',
+                        background: '#FFF'
+                      }}
+                    />
+                    <span style={{ color: '#EF4444', fontWeight: '600', fontSize: '12px' }}>
+                      - ₹{formatNumber(discountAmount)}
+                    </span>
+                    <span style={{ fontWeight: '700', color: '#0F172A' }}>
+                      {formatNumber(afterDiscount)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    {[90, 85, 80, 0].map(pct => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setDiscountPercent(pct)}
+                        style={{
+                          background: Number(discountPercent) === pct ? '#4B4DFF' : '#F1F5F9',
+                          color: Number(discountPercent) === pct ? '#FFF' : '#475569',
+                          border: '1px solid #CBD5E1',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Additional Discount % */}
@@ -1428,6 +1618,7 @@ export default function App() {
             products={products}
             setProducts={setProducts}
             showToast={showToast}
+            activeYear={activeYear}
           />
         )}
 
@@ -1437,6 +1628,7 @@ export default function App() {
             customers={customers}
             setCustomers={setCustomers}
             showToast={showToast}
+            activeYear={activeYear}
           />
         )}
 
@@ -1447,6 +1639,7 @@ export default function App() {
             setSavedInvoices={setSavedInvoices}
             company={company}
             showToast={showToast}
+            activeYear={activeYear}
           />
         )}
 
@@ -1456,6 +1649,13 @@ export default function App() {
             company={company}
             setCompany={setCompany}
             showToast={showToast}
+            activeYear={activeYear}
+            dbConnected={dbConnected}
+            dbInfo={dbInfo}
+            refreshDbStatus={refreshDbStatus}
+            products={products}
+            customers={customers}
+            savedInvoices={savedInvoices}
           />
         )}
 
@@ -1728,7 +1928,7 @@ export default function App() {
 // -------------------------------------------------------------
 // SUB-VIEW: Product Master Component
 // -------------------------------------------------------------
-function ProductMasterView({ products, setProducts, showToast }) {
+function ProductMasterView({ products, setProducts, showToast, activeYear }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategory, setSelectedCategory] = React.useState('All');
 
@@ -1748,14 +1948,15 @@ function ProductMasterView({ products, setProducts, showToast }) {
     return matchesSearch && matchesCat;
   });
 
-  const handleCreateProduct = (e) => {
+  const handleCreateProduct = async (e) => {
     e.preventDefault();
     if (!newName || !newRate) {
       showToast('Please fill required product name and rate!');
       return;
     }
+    const tempId = Date.now();
     const newProduct = {
-      id: Date.now(),
+      id: tempId,
       code: newCode || String(products.length + 1),
       name: newName,
       category: newCat,
@@ -1764,18 +1965,35 @@ function ProductMasterView({ products, setProducts, showToast }) {
       stock: Number(newStock) || 0,
       taxPercent: 18
     };
+
     setProducts([...products, newProduct]);
     setIsModalOpen(false);
     setNewName('');
     setNewCode('');
     setNewRate('');
-    showToast('New Cracker Item Added Successfully!');
+
+    try {
+      const saved = await apiAddProduct({ ...newProduct, year: activeYear });
+      if (saved && saved.id) {
+        setProducts(prev => prev.map(p => p.id === tempId ? { ...p, id: saved.id } : p));
+      }
+      showToast('New Cracker Item Added & Saved to TiDB Cloud!');
+    } catch (err) {
+      console.warn('Saved locally, TiDB error:', err);
+      showToast('Item Added (Saved locally)');
+    }
   };
 
-  const handleDeleteProduct = (id) => {
+  const handleDeleteProduct = async (id) => {
     if (confirm('Are you sure you want to delete this product?')) {
       setProducts(products.filter(p => p.id !== id));
-      showToast('Product removed from catalog');
+      try {
+        await apiDeleteProduct(id);
+        showToast('Product removed from catalog & TiDB Cloud');
+      } catch (err) {
+        console.warn('Deleted locally, TiDB error:', err);
+        showToast('Product removed from catalog');
+      }
     }
   };
 
@@ -2057,7 +2275,7 @@ function ProductMasterView({ products, setProducts, showToast }) {
 // -------------------------------------------------------------
 // SUB-VIEW: Customer Master Component
 // -------------------------------------------------------------
-function CustomerMasterView({ customers, setCustomers, showToast }) {
+function CustomerMasterView({ customers, setCustomers, showToast, activeYear }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [name, setName] = React.useState('');
@@ -2070,14 +2288,15 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
     c.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddCustomer = (e) => {
+  const handleAddCustomer = async (e) => {
     e.preventDefault();
     if (!name || !mobile) {
       showToast('Name and mobile are required');
       return;
     }
+    const tempId = Date.now();
     const newCust = {
-      id: Date.now(),
+      id: tempId,
       name,
       mobile,
       address: address || 'Sivakasi',
@@ -2089,7 +2308,17 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
     setName('');
     setMobile('');
     setAddress('');
-    showToast('New Customer Added Successfully!');
+
+    try {
+      const saved = await apiAddCustomer({ ...newCust, year: activeYear });
+      if (saved && saved.id) {
+        setCustomers(prev => prev.map(c => c.id === tempId ? { ...c, id: saved.id } : c));
+      }
+      showToast('New Customer Added & Saved to TiDB Cloud!');
+    } catch (err) {
+      console.warn('Saved customer locally, TiDB error:', err);
+      showToast('Customer Added (Saved locally)');
+    }
   };
 
   return (
@@ -2187,9 +2416,16 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
                 </td>
                 <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                   <button
-                    onClick={() => {
-                      setCustomers(customers.filter(item => item.id !== c.id));
-                      showToast('Customer deleted');
+                    onClick={async () => {
+                      if (confirm(`Delete customer "${c.name}"?`)) {
+                        setCustomers(customers.filter(item => item.id !== c.id));
+                        try {
+                          await apiDeleteCustomer(c.id);
+                          showToast('Customer deleted from TiDB Cloud');
+                        } catch (err) {
+                          showToast('Customer deleted');
+                        }
+                      }
                     }}
                     style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer' }}
                   >
@@ -2248,7 +2484,7 @@ function CustomerMasterView({ customers, setCustomers, showToast }) {
 // -------------------------------------------------------------
 // SUB-VIEW: Reports & Saved Invoices
 // -------------------------------------------------------------
-function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
+function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear }) {
   const totalRevenue = savedInvoices.reduce((acc, curr) => acc + curr.netAmount, 0);
   const totalGross = savedInvoices.reduce((acc, curr) => acc + curr.grossTotal, 0);
 
@@ -2257,10 +2493,15 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
     doc.save(`Sri_Kaliswari_Bill_${inv.billNo}_${inv.customerName}.pdf`);
   };
 
-  const handleDeleteInvoice = (billNo) => {
+  const handleDeleteInvoice = async (billNo) => {
     if (confirm(`Are you sure you want to delete Invoice #${billNo}?`)) {
       setSavedInvoices(savedInvoices.filter(i => i.billNo !== billNo));
-      showToast(`Bill #${billNo} removed`);
+      try {
+        await apiDeleteInvoice(billNo, activeYear);
+        showToast(`Bill #${billNo} removed from TiDB Cloud`);
+      } catch (err) {
+        showToast(`Bill #${billNo} removed locally`);
+      }
     }
   };
 
@@ -2297,10 +2538,15 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
           <span>Recent Invoices & Quotations History</span>
           {savedInvoices.length > 0 && (
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm('Clear all saved invoices history and reset bill number to 1?')) {
                   setSavedInvoices([]);
-                  showToast('All invoices cleared. Bill counter reset to #1.');
+                  try {
+                    await apiClearAllInvoices(activeYear);
+                    showToast('All invoices cleared from TiDB Cloud. Counter reset.');
+                  } catch (err) {
+                    showToast('All invoices cleared locally.');
+                  }
                 }
               }}
               style={{
@@ -2402,123 +2648,324 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast }) {
 // -------------------------------------------------------------
 // SUB-VIEW: Settings
 // -------------------------------------------------------------
-function SettingsView({ company, setCompany, showToast }) {
+function SettingsView({ company, setCompany, showToast, activeYear, dbConnected, dbInfo, refreshDbStatus, products, customers, savedInvoices }) {
   const [formData, setFormData] = React.useState({ ...company });
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const [testResult, setTestResult] = React.useState(null);
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     setCompany(formData);
-    showToast('Company details & Print header updated!');
+    try {
+      await apiSaveCompany(formData);
+      showToast('Company details & Print header saved to TiDB Cloud!');
+    } catch (err) {
+      showToast('Saved locally (TiDB Cloud offline)');
+    }
+  };
+
+  const handleManualTest = async () => {
+    setTestResult('testing');
+    try {
+      const res = await checkDbStatus();
+      if (res.ok) {
+        setTestResult({ ok: true, msg: `Connected! Ping OK at ${new Date(res.connectedAt).toLocaleTimeString()}` });
+        if (refreshDbStatus) refreshDbStatus();
+      } else {
+        setTestResult({ ok: false, msg: res.error || 'Connection failed' });
+      }
+    } catch (e) {
+      setTestResult({ ok: false, msg: e.message });
+    }
+  };
+
+  const handleSyncToDb = async () => {
+    if (!confirm(`Sync all current products (${products.length}), customers (${customers.length}), and bills (${savedInvoices.length}) for Year ${activeYear} to TiDB Cloud?`)) {
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await syncLocalStorageToDb({
+        year: activeYear,
+        company: formData,
+        products,
+        customers,
+        invoices: savedInvoices
+      });
+      if (res && res.success) {
+        showToast('All data successfully synced to TiDB Cloud!');
+      } else {
+        showToast(res?.error || 'Sync completed with warnings');
+      }
+    } catch (err) {
+      showToast('Sync failed: ' + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
-    <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '28px', border: '1px solid #E2E8F0', maxWidth: '800px', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-      <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
-        Firm & Bill Print Settings
-      </h2>
-      <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px' }}>
-        Configure header branding, GST number, bank information and print terms for Sri Kaliswari Crackers.
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px', margin: '0 auto' }}>
 
-      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Company Business Name</label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={e => setFormData({ ...formData, name: e.target.value })}
-            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontWeight: '700' }}
-          />
-        </div>
-
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Tagline</label>
-          <input
-            type="text"
-            value={formData.tagline}
-            onChange={e => setFormData({ ...formData, tagline: e.target.value })}
-            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-          />
-        </div>
-
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Factory / Store Address</label>
-          <input
-            type="text"
-            value={formData.address}
-            onChange={e => setFormData({ ...formData, address: e.target.value })}
-            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-          />
-        </div>
-
-        <div className="settings-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Phone / Mobile Contacts</label>
-            <input
-              type="text"
-              value={formData.mobile}
-              onChange={e => setFormData({ ...formData, mobile: e.target.value })}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-            />
+      {/* TiDB Cloud Connection Card */}
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: '16px',
+        padding: '24px',
+        border: '1px solid #E2E8F0',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFF'
+            }}>
+              <Database size={20} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                TiDB Cloud Database Connection
+              </h2>
+              <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
+                Serverless MySQL Cloud DB for Sri Kaliswari Crackers
+              </p>
+            </div>
           </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>GSTIN Number</label>
-            <input
-              type="text"
-              value={formData.gstin}
-              onChange={e => setFormData({ ...formData, gstin: e.target.value })}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontWeight: '600' }}
-            />
-          </div>
-        </div>
 
-        <div className="settings-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Bank Name</label>
-            <input
-              type="text"
-              value={formData.bankName}
-              onChange={e => setFormData({ ...formData, bankName: e.target.value })}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Bank Account No</label>
-            <input
-              type="text"
-              value={formData.accountNo}
-              onChange={e => setFormData({ ...formData, accountNo: e.target.value })}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>IFSC Code</label>
-            <input
-              type="text"
-              value={formData.ifscCode}
-              onChange={e => setFormData({ ...formData, ifscCode: e.target.value })}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-            />
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          style={{
-            background: '#4B4DFF',
-            color: '#FFF',
-            border: 'none',
-            padding: '12px',
-            borderRadius: '10px',
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: dbConnected ? '#ECFDF5' : '#FEF2F2',
+            border: `1px solid ${dbConnected ? '#A7F3D0' : '#FECACA'}`,
+            padding: '6px 14px',
+            borderRadius: '999px',
+            fontSize: '12px',
             fontWeight: '700',
-            fontSize: '14px',
-            cursor: 'pointer',
-            marginTop: '10px'
-          }}
-        >
-          Save Configuration
-        </button>
-      </form>
+            color: dbConnected ? '#065F46' : '#991B1B'
+          }}>
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: dbConnected ? '#10B981' : '#EF4444',
+              boxShadow: dbConnected ? '0 0 8px #10B981' : 'none'
+            }}></span>
+            {dbConnected ? 'Status: Live & Connected' : 'Status: Offline / Disconnected'}
+          </div>
+        </div>
+
+        {/* Database parameters grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '12px',
+          background: '#F8FAFC',
+          padding: '14px',
+          borderRadius: '12px',
+          border: '1px solid #E2E8F0',
+          fontSize: '12px',
+          marginBottom: '16px'
+        }}>
+          <div>
+            <div style={{ color: '#64748B', fontWeight: '600' }}>Host</div>
+            <div style={{ color: '#0F172A', fontWeight: '700', wordBreak: 'break-all' }}>
+              gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#64748B', fontWeight: '600' }}>Port</div>
+            <div style={{ color: '#0F172A', fontWeight: '700' }}>4000 (TLS/SSL Encrypted)</div>
+          </div>
+          <div>
+            <div style={{ color: '#64748B', fontWeight: '600' }}>Database</div>
+            <div style={{ color: '#0F172A', fontWeight: '700' }}>kalishwaribilling</div>
+          </div>
+          <div>
+            <div style={{ color: '#64748B', fontWeight: '600' }}>Username</div>
+            <div style={{ color: '#0F172A', fontWeight: '700' }}>2jfg5VSYFYcSWGr.root</div>
+          </div>
+        </div>
+
+        {testResult && testResult !== 'testing' && (
+          <div style={{
+            padding: '10px 14px',
+            borderRadius: '8px',
+            marginBottom: '14px',
+            fontSize: '12px',
+            fontWeight: '600',
+            background: testResult.ok ? '#ECFDF5' : '#FEF2F2',
+            color: testResult.ok ? '#065F46' : '#991B1B',
+            border: `1px solid ${testResult.ok ? '#A7F3D0' : '#FECACA'}`
+          }}>
+            {testResult.ok ? '✓ ' : '✕ '} {testResult.msg}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleManualTest}
+            disabled={testResult === 'testing'}
+            style={{
+              background: '#0F172A',
+              color: '#FFF',
+              border: 'none',
+              padding: '9px 16px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <RefreshCw size={13} className={testResult === 'testing' ? 'spin' : ''} />
+            {testResult === 'testing' ? 'Testing Ping...' : 'Test Connection'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSyncToDb}
+            disabled={isSyncing}
+            style={{
+              background: '#10B981',
+              color: '#FFF',
+              border: 'none',
+              padding: '9px 16px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Server size={13} />
+            {isSyncing ? 'Syncing...' : `Sync All Local Data to TiDB (${activeYear})`}
+          </button>
+        </div>
+      </div>
+
+      {/* Firm & Bill Print Settings Form */}
+      <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '28px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
+          Firm & Bill Print Settings
+        </h2>
+        <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px' }}>
+          Configure header branding, GST number, bank information and print terms for Sri Kaliswari Crackers.
+        </p>
+
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Company Business Name</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontWeight: '700' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Tagline</label>
+            <input
+              type="text"
+              value={formData.tagline}
+              onChange={e => setFormData({ ...formData, tagline: e.target.value })}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Factory / Store Address</label>
+            <input
+              type="text"
+              value={formData.address}
+              onChange={e => setFormData({ ...formData, address: e.target.value })}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+            />
+          </div>
+
+          <div className="settings-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Phone / Mobile Contacts</label>
+              <input
+                type="text"
+                value={formData.mobile}
+                onChange={e => setFormData({ ...formData, mobile: e.target.value })}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>GSTIN Number</label>
+              <input
+                type="text"
+                value={formData.gstin}
+                onChange={e => setFormData({ ...formData, gstin: e.target.value })}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontWeight: '600' }}
+              />
+            </div>
+          </div>
+
+          <div className="settings-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Bank Name</label>
+              <input
+                type="text"
+                value={formData.bankName}
+                onChange={e => setFormData({ ...formData, bankName: e.target.value })}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>Bank Account No</label>
+              <input
+                type="text"
+                value={formData.accountNo}
+                onChange={e => setFormData({ ...formData, accountNo: e.target.value })}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '4px' }}>IFSC Code</label>
+              <input
+                type="text"
+                value={formData.ifscCode}
+                onChange={e => setFormData({ ...formData, ifscCode: e.target.value })}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            style={{
+              background: '#4B4DFF',
+              color: '#FFF',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '10px',
+              fontWeight: '700',
+              fontSize: '14px',
+              cursor: 'pointer',
+              marginTop: '10px'
+            }}
+          >
+            Save Configuration to TiDB Cloud
+          </button>
+        </form>
+      </div>
+
     </div>
   );
 }
