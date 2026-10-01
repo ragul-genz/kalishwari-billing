@@ -29,11 +29,19 @@ import {
   Calendar,
   Database,
   Server,
-  AlertCircle
+  AlertCircle,
+  Share2,
+  Send,
+  Copy,
+  ExternalLink,
+  Check
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
 import { formatCurrency, formatNumber, generatePdfDocument } from './utils/pdfGenerator';
+import { PrintableInvoice } from './components/PrintableInvoice';
+import { cleanPhoneNumber, buildWhatsAppBillMessage, openWhatsAppChat } from './utils/whatsapp';
+
 import {
   checkDbStatus,
   fetchYears,
@@ -306,6 +314,8 @@ export default function App() {
   const [customerSearch, setCustomerSearch] = React.useState('');
   const [toastMessage, setToastMessage] = React.useState('');
   const [previewInvoice, setPreviewInvoice] = React.useState(null); // invoice side drawer
+  const [printingInvoice, setPrintingInvoice] = React.useState(null); // active invoice sent to browser print
+  const [whatsappModal, setWhatsappModal] = React.useState(null); // whatsapp status popup modal
 
   const customerNameRef = React.useRef(null);
   const productSearchRef = React.useRef(null);
@@ -574,15 +584,44 @@ export default function App() {
       origin: { y: 0.6 }
     });
 
-    showToast(`Bill #SKC ${billNo} Saved to TiDB Cloud!`);
-
-    if (shouldPrint) {
-      // Show invoice preview drawer on the left
-      setPreviewInvoice(newInvoice);
-      // Also auto-download the PDF immediately
+    // 1. AUTOMATIC COMPUTER PDF DOWNLOAD (Save bill automatically to PC)
+    try {
       const doc = generatePdfDocument(newInvoice, company);
-      doc.save(`Sri_Kaliswari_Bill_SKC_${billNo}_${customerName || 'Customer'}.pdf`);
+      const safeCustomerName = (customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save(`Sri_Kaliswari_Bill_SKC_${billNo}_${safeCustomerName}.pdf`);
+    } catch (err) {
+      console.warn('PDF auto-download error:', err);
     }
+
+    // 2. AUTOMATIC WHATSAPP SHARING TO CUSTOMER MOBILE
+    const cleanMobile = cleanPhoneNumber(customerMobile);
+    if (cleanMobile && cleanMobile.length >= 10) {
+      const waMsg = buildWhatsAppBillMessage(newInvoice, company);
+      const waResult = openWhatsAppChat(cleanMobile, waMsg);
+      setWhatsappModal({
+        isOpen: true,
+        phone: cleanMobile,
+        customerName: newInvoice.customerName,
+        billNo: newInvoice.billNo,
+        netAmount: newInvoice.netAmount,
+        waUrl: waResult.waUrl,
+        message: waMsg,
+        popupBlocked: waResult.popupBlocked
+      });
+      showToast(`Bill #SKC ${billNo} Saved & Sent to WhatsApp (+${cleanMobile})!`);
+    } else {
+      showToast(`Bill #SKC ${billNo} Saved & Downloaded to Computer!`);
+    }
+
+    // 3. AUTOMATIC BROWSER PRINT PREVIEW (Matches exactly the A4 printable format)
+    if (shouldPrint) {
+      setPrintingInvoice(newInvoice);
+      setPreviewInvoice(newInvoice);
+      setTimeout(() => {
+        window.print();
+      }, 350);
+    }
+
 
     // Auto-clear form for next bill and auto-advance to next sequential bill number
     setBillItems([]);
@@ -1309,9 +1348,9 @@ export default function App() {
                   background: '#FAFAFC'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: '800', fontSize: '15px', color: '#1E293B' }}>Product Items List</span>
-                    <span style={{ background: '#EEF2FF', color: '#4B4DFF', fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px' }}>
-                      {billItems.length} items
+                    <Package size={18} color="#FF6B35" />
+                    <span style={{ fontWeight: '800', fontSize: '15px', color: '#1E293B' }}>
+                      Invoice Items ({billItems.length}) • Total Cases: {billItems.reduce((acc, curr) => acc + (Number(curr.qty) || 0), 0)}
                     </span>
                   </div>
 
@@ -1319,18 +1358,20 @@ export default function App() {
                     <button
                       onClick={() => setBillItems([])}
                       style={{
-                        background: 'transparent',
-                        border: 'none',
+                        background: '#FFFFFF',
+                        border: '1px solid #FECACA',
                         color: '#EF4444',
                         cursor: 'pointer',
                         fontSize: '12px',
-                        fontWeight: '600',
+                        fontWeight: '700',
+                        padding: '6px 14px',
+                        borderRadius: '6px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '4px'
+                        gap: '5px'
                       }}
                     >
-                      <Trash2 size={13} /> Clear Table
+                      Clear Items
                     </button>
                   )}
                 </div>
@@ -1338,15 +1379,15 @@ export default function App() {
                 <div style={{ overflowX: 'auto', flex: 1, minHeight: '320px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                     <thead>
-                      <tr style={{ background: '#F1F5F9', color: '#475569', fontWeight: '700', borderBottom: '1px solid #CBD5E1' }}>
-                        <th style={{ padding: '12px 14px', width: '50px', textAlign: 'center' }}>SNo</th>
-                        <th style={{ padding: '12px 14px', width: '70px', textAlign: 'center' }}>Code</th>
-                        <th style={{ padding: '12px 14px' }}>Product Description</th>
-                        <th style={{ padding: '12px 14px', width: '130px' }}>Content</th>
-                        <th style={{ padding: '12px 14px', width: '80px', textAlign: 'center' }}>Qty</th>
-                        <th style={{ padding: '12px 14px', width: '100px', textAlign: 'right' }}>Rate (₹)</th>
-                        <th style={{ padding: '12px 14px', width: '110px', textAlign: 'right' }}>Total (₹)</th>
-                        <th style={{ padding: '12px 14px', width: '50px', textAlign: 'center' }}></th>
+                      <tr style={{ background: '#F8FAFC', color: '#475569', fontWeight: '700', borderBottom: '1px solid #CBD5E1' }}>
+                        <th style={{ padding: '12px 14px', width: '45px', textAlign: 'center' }}>S.N</th>
+                        <th style={{ padding: '12px 14px' }}>CRACKER NAME</th>
+                        <th style={{ padding: '12px 14px', width: '130px' }}>CATEGORY</th>
+                        <th style={{ padding: '12px 14px', width: '140px' }}>BRAND / PACKING</th>
+                        <th style={{ padding: '12px 14px', width: '90px', textAlign: 'right' }}>MRP (₹)</th>
+                        <th style={{ padding: '12px 14px', width: '105px', textAlign: 'right' }}>SELL PRICE (₹)</th>
+                        <th style={{ padding: '12px 14px', width: '120px', textAlign: 'center' }}>QTY</th>
+                        <th style={{ padding: '12px 14px', width: '40px', textAlign: 'center' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1360,60 +1401,89 @@ export default function App() {
                         </tr>
                       ) : (
                         billItems.map((item, index) => {
-                          const rowTotal = item.qty * item.rate;
+                          const disc = Number(discountPercent) || 0;
+                          const sellPrice = item.rate * (1 - disc / 100);
                           return (
                             <tr key={index} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}>
-                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: '600', color: '#94A3B8' }}>
+                              <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: '600', color: '#94A3B8' }}>
                                 {index + 1}
                               </td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: '700', color: '#4B4DFF' }}>
-                                {item.code}
+                              <td style={{ padding: '12px 14px' }}>
+                                <div style={{ fontWeight: '700', color: '#1E293B', fontSize: '13.5px' }}>{item.name}</div>
+                                {item.code && (
+                                  <span style={{ fontSize: '10.5px', background: '#FFF7ED', color: '#EA580C', padding: '1px 6px', borderRadius: '4px', fontWeight: '800', border: '1px solid #FED7AA' }}>
+                                    {item.code}
+                                  </span>
+                                )}
                               </td>
-                              <td style={{ padding: '10px 14px', fontWeight: '600', color: '#1E293B' }}>
-                                {item.name}
+                              <td style={{ padding: '12px 14px', color: '#64748B', fontSize: '12px' }}>
+                                {item.category || 'Sound Crackers'}
                               </td>
-                              <td style={{ padding: '10px 14px', color: '#64748B', fontSize: '12px' }}>
-                                {item.content}
+                              <td style={{ padding: '12px 14px', color: '#64748B', fontSize: '12px' }}>
+                                {item.content || '1 Box'}
                               </td>
-                              <td style={{ padding: '6px 14px', textAlign: 'center' }}>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={item.qty}
-                                  onChange={(e) => handleUpdateItemQty(index, e.target.value)}
-                                  style={{
-                                    width: '60px',
-                                    padding: '5px 6px',
-                                    textAlign: 'center',
-                                    borderRadius: '6px',
-                                    border: '1px solid #CBD5E1',
-                                    fontWeight: '700',
-                                    background: '#F8FAFC'
-                                  }}
-                                />
+                              <td style={{ padding: '12px 14px', textAlign: 'right', color: '#94A3B8', textDecoration: disc > 0 ? 'line-through' : 'none' }}>
+                                ₹{formatNumber(item.rate)}
                               </td>
-                              <td style={{ padding: '6px 14px', textAlign: 'right' }}>
-                                <input
-                                  type="number"
-                                  value={item.rate}
-                                  onChange={(e) => handleUpdateItemRate(index, e.target.value)}
-                                  style={{
-                                    width: '80px',
-                                    padding: '5px 6px',
-                                    textAlign: 'right',
-                                    borderRadius: '6px',
-                                    border: '1px solid #CBD5E1',
-                                    fontWeight: '600',
-                                    background: '#F8FAFC'
-                                  }}
-                                />
+                              <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '800', color: '#EA580C', fontSize: '14px' }}>
+                                ₹{formatNumber(sellPrice)}
                               </td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                                {formatNumber(rowTotal)}
+                              <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', background: '#FFFFFF', overflow: 'hidden' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItemQty(index, Math.max(1, item.qty - 1))}
+                                    style={{
+                                      border: 'none',
+                                      background: '#F8FAFC',
+                                      color: '#475569',
+                                      width: '28px',
+                                      height: '32px',
+                                      cursor: 'pointer',
+                                      fontWeight: '800',
+                                      fontSize: '15px'
+                                    }}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={item.qty}
+                                    onChange={(e) => handleUpdateItemQty(index, e.target.value)}
+                                    style={{
+                                      width: '44px',
+                                      height: '32px',
+                                      border: 'none',
+                                      textAlign: 'center',
+                                      fontWeight: '800',
+                                      fontSize: '14px',
+                                      color: '#0F172A',
+                                      outline: 'none'
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItemQty(index, item.qty + 1)}
+                                    style={{
+                                      border: 'none',
+                                      background: '#F8FAFC',
+                                      color: '#475569',
+                                      width: '28px',
+                                      height: '32px',
+                                      cursor: 'pointer',
+                                      fontWeight: '800',
+                                      fontSize: '15px'
+                                    }}
+                                  >
+                                    +
+                                  </button>
+                                </div>
                               </td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                              <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                                 <button
                                   onClick={() => handleRemoveItem(index)}
+                                  title="Remove item"
                                   style={{
                                     background: 'transparent',
                                     border: 'none',
@@ -1434,6 +1504,7 @@ export default function App() {
                         })
                       )}
                     </tbody>
+
                   </table>
                 </div>
 
@@ -1597,13 +1668,23 @@ export default function App() {
                   <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
                     Payment Mode
                   </label>
-                  <div className="qb-payment-modes">
-                    {['Cash', 'GPay / UPI', 'Bank', 'Credit'].map(mode => (
+                  <div className="qb-payment-modes" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+                    {['Cash', 'UPI', 'Card', 'Credit', 'Split'].map(mode => (
                       <button
                         key={mode}
                         type="button"
                         onClick={() => setPaymentMode(mode)}
-                        className={`qb-pay-btn ${paymentMode === mode ? 'active' : ''}`}
+                        style={{
+                          padding: '10px 4px',
+                          borderRadius: '8px',
+                          border: paymentMode === mode ? '2px solid #FF6B35' : '1px solid #CBD5E1',
+                          background: paymentMode === mode ? '#FFF7ED' : '#FFFFFF',
+                          color: paymentMode === mode ? '#EA580C' : '#475569',
+                          fontWeight: '700',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
                       >
                         {mode}
                       </button>
@@ -1621,17 +1702,17 @@ export default function App() {
                   boxShadow: '0 8px 20px rgba(255, 107, 53, 0.28)'
                 }}>
                   <div style={{ fontSize: '11px', opacity: 0.9, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Net Final Amount (₹)
+                    Net Total:
                   </div>
-                  <div className="net-amount-value" style={{ fontSize: '28px', fontWeight: '800', marginTop: '4px' }}>
-                    ₹ {formatNumber(netAmount)}
+                  <div className="net-amount-value" style={{ fontSize: '30px', fontWeight: '900', marginTop: '4px' }}>
+                    ₹{formatNumber(netAmount)}
                   </div>
                   <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
                     {docFormat === 'INVOICE' ? 'Official GST Tax Invoice' : (docFormat === 'ESTIMATE' ? 'Estimate of Supply' : 'Official Quotation')}
                   </div>
                 </div>
 
-                {/* Action Buttons (Save & Print, Delete, Clear, Convert to Estimate) */}
+                {/* Action Buttons (Save & Print, Save Only, Clear Bill Screen) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
                   <button
                     onClick={() => handleSaveAndPrint(true)}
@@ -1639,55 +1720,64 @@ export default function App() {
                       background: '#FF6B35',
                       color: '#FFF',
                       border: 'none',
-                      padding: '13px',
+                      padding: '14px',
                       borderRadius: '10px',
                       fontWeight: '800',
-                      fontSize: '14px',
+                      fontSize: '15px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 14px rgba(255, 107, 53, 0.35)',
+                      boxShadow: '0 6px 18px rgba(255, 107, 53, 0.38)',
                       transition: 'all 0.2s'
                     }}
                   >
-                    <Printer size={18} /> Save & Print Bill (F5)
+                    <Printer size={19} /> SAVE & PRINT BILL (F5)
                   </button>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    <button
-                      onClick={() => handleSaveAndPrint(false)}
-                      style={{
-                        background: '#F1F5F9',
-                        color: '#334155',
-                        border: '1px solid #CBD5E1',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        fontWeight: '600',
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Save Only
-                    </button>
-                    <button
-                      onClick={handleResetBill}
-                      style={{
-                        background: '#FEE2E2',
-                        color: '#DC2626',
-                        border: '1px solid #FECACA',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        fontWeight: '600',
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      New Bill (F2)
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleSaveAndPrint(false)}
+                    style={{
+                      background: '#10B981',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontWeight: '700',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
+                    }}
+                  >
+                    <Check size={16} /> Save Only
+                  </button>
+
+                  <button
+                    onClick={handleResetBill}
+                    style={{
+                      background: '#FFFFFF',
+                      color: '#EF4444',
+                      border: '1px solid #FECACA',
+                      padding: '11px',
+                      borderRadius: '8px',
+                      fontWeight: '700',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={15} /> Clear Bill Screen
+                  </button>
                 </div>
+
 
               </div>
 
@@ -1735,6 +1825,8 @@ export default function App() {
             showToast={showToast}
             activeYear={activeYear}
             setPreviewInvoice={setPreviewInvoice}
+            setWhatsappModal={setWhatsappModal}
+            setPrintingInvoice={setPrintingInvoice}
             loadInvoices={async () => {
               const inv = await fetchInvoices(activeYear);
               if (Array.isArray(inv)) setSavedInvoices(inv);
@@ -1989,38 +2081,121 @@ export default function App() {
 
             {/* Drawer Footer */}
             <div style={{
-              padding: '16px 22px',
+              padding: '16px 20px',
               borderTop: '1px solid #E2E8F0',
-              display: 'flex', gap: '10px',
-              flexShrink: 0, background: '#FAFBFF'
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              flexShrink: 0,
+              background: '#FAFBFF'
             }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    const doc = generatePdfDocument(previewInvoice, company);
+                    const safeName = (previewInvoice.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+                    doc.save(`Sri_Kaliswari_Bill_SKC_${previewInvoice.billNo}_${safeName}.pdf`);
+                    showToast('PDF downloaded to computer!');
+                  }}
+                  style={{
+                    background: '#EEF2FF',
+                    border: '1px solid #C7D2FE',
+                    color: '#4B4DFF',
+                    padding: '11px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Download size={16} /> Download PDF
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPrintingInvoice(previewInvoice);
+                    setTimeout(() => {
+                      window.print();
+                    }, 350);
+                  }}
+                  style={{
+                    background: '#FF6B35',
+                    color: '#FFF',
+                    border: 'none',
+                    padding: '11px',
+                    borderRadius: '10px',
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(255,107,53,0.3)'
+                  }}
+                >
+                  <Printer size={16} /> Print Bill (A4)
+                </button>
+              </div>
+
+              {/* WhatsApp Action Button in Drawer */}
               <button
                 onClick={() => {
-                  const doc = generatePdfDocument(previewInvoice, company);
-                  doc.save(`Sri_Kaliswari_Bill_SKC_${previewInvoice.billNo}_${previewInvoice.customerName}.pdf`);
+                  const clean = cleanPhoneNumber(previewInvoice.customerMobile);
+                  if (!clean || clean.length < 10) {
+                    showToast('No valid customer phone number found in this bill');
+                    return;
+                  }
+                  const waMsg = buildWhatsAppBillMessage(previewInvoice, company);
+                  const waRes = openWhatsAppChat(clean, waMsg);
+                  setWhatsappModal({
+                    isOpen: true,
+                    phone: clean,
+                    customerName: previewInvoice.customerName,
+                    billNo: previewInvoice.billNo,
+                    netAmount: previewInvoice.netAmount,
+                    waUrl: waRes.waUrl,
+                    message: waMsg,
+                    popupBlocked: waRes.popupBlocked
+                  });
                 }}
                 style={{
-                  flex: 1,
-                  background: 'linear-gradient(135deg,#4B4DFF 0%,#6D3DFF 100%)',
-                  color: '#fff', border: 'none',
-                  padding: '13px', borderRadius: '12px',
-                  fontWeight: '800', fontSize: '14px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: '8px', boxShadow: '0 6px 20px rgba(75,77,255,0.35)'
+                  background: '#25D366',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  fontWeight: '800',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)'
                 }}
               >
-                <Download size={18} /> Download PDF
+                <Share2 size={16} /> Send Bill to Customer WhatsApp
               </button>
+
               <button
                 onClick={() => setPreviewInvoice(null)}
                 style={{
-                  background: '#F1F5F9', color: '#64748B',
+                  background: '#F1F5F9',
+                  color: '#64748B',
                   border: '1px solid #E2E8F0',
-                  padding: '13px 18px', borderRadius: '12px',
-                  fontWeight: '700', fontSize: '14px', cursor: 'pointer'
+                  padding: '10px',
+                  borderRadius: '10px',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  cursor: 'pointer'
                 }}
               >
-                Close
+                Close Preview
               </button>
             </div>
 
@@ -2028,9 +2203,156 @@ export default function App() {
         </>
       )}
 
+      {/* ── PRINT-ONLY CONTAINER FOR NATIVE BROWSER PRINT PREVIEW ────────────── */}
+      <div className="print-only">
+        <PrintableInvoice
+          invoice={printingInvoice || previewInvoice}
+          company={company}
+        />
+      </div>
+
+      {/* ── WHATSAPP INSTANT ACTION MODAL ─────────────────────────────────────── */}
+      {whatsappModal && whatsappModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.7)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2500,
+          padding: '16px',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '20px',
+            padding: '28px',
+            width: '460px',
+            maxWidth: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #E2E8F0',
+            textAlign: 'center',
+            position: 'relative'
+          }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              background: '#DCFCE7',
+              color: '#16A34A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto',
+              fontSize: '28px',
+              boxShadow: '0 4px 14px rgba(22, 163, 74, 0.2)'
+            }}>
+              💬
+            </div>
+
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: '0 0 6px 0' }}>
+              WhatsApp Bill Dispatched!
+            </h3>
+            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 16px 0' }}>
+              Bill #SKC <b>{whatsappModal.billNo}</b> • <b>{whatsappModal.customerName}</b> (₹{formatNumber(whatsappModal.netAmount)})
+            </p>
+
+            <div style={{
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px',
+              padding: '12px 14px',
+              marginBottom: '18px',
+              textAlign: 'left',
+              fontSize: '12.5px'
+            }}>
+              <div style={{ color: '#64748B', marginBottom: '3px' }}>Recipient Phone:</div>
+              <div style={{ fontWeight: '800', fontSize: '16px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>+{whatsappModal.phone}</span>
+                <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#16A34A', padding: '1px 7px', borderRadius: '10px' }}>Customer</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '6px' }}>
+                {whatsappModal.popupBlocked
+                  ? '⚠️ Your browser blocked the pop-up window. Click the green button below to open WhatsApp chat.'
+                  : '✓ WhatsApp chat opened in a new tab with the formatted bill message.'}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <a
+                href={whatsappModal.waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  background: '#25D366',
+                  color: '#FFFFFF',
+                  textDecoration: 'none',
+                  padding: '12px 20px',
+                  borderRadius: '10px',
+                  fontWeight: '800',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)'
+                }}
+              >
+                📲 Open Customer WhatsApp Chat
+              </a>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(whatsappModal.message);
+                    showToast('WhatsApp bill message copied to clipboard!');
+                  }}
+                  style={{
+                    background: '#F1F5F9',
+                    border: '1px solid #CBD5E1',
+                    color: '#334155',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Copy size={13} /> Copy Message
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWhatsappModal(null)}
+                  style={{
+                    background: '#F8FAFC',
+                    border: '1px solid #CBD5E1',
+                    color: '#64748B',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
 
 // -------------------------------------------------------------
 // SUB-VIEW: Product Master Component
@@ -3009,7 +3331,7 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear, lo
 // -------------------------------------------------------------
 // SUB-VIEW: Reports & Saved Invoices
 // -------------------------------------------------------------
-function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear, setPreviewInvoice, loadInvoices, reloadProducts }) {
+function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear, setPreviewInvoice, loadInvoices, reloadProducts, setWhatsappModal, setPrintingInvoice }) {
   const [isReloading, setIsReloading] = React.useState(false);
   const totalRevenue = savedInvoices.reduce((acc, curr) => acc + (Number(curr.netAmount) || 0), 0);
   const totalGross = savedInvoices.reduce((acc, curr) => acc + (Number(curr.grossTotal) || 0), 0);
@@ -3208,9 +3530,34 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                       >
                         <Eye size={13} />
                       </button>
+
                       <button
                         type="button"
-                        title="Download PDF"
+                        title="Print A4 Bill"
+                        onClick={() => {
+                          if (setPrintingInvoice) setPrintingInvoice(inv);
+                          setTimeout(() => window.print(), 350);
+                        }}
+                        style={{
+                          background: '#FFF7ED',
+                          border: '1px solid #FED7AA',
+                          color: '#EA580C',
+                          padding: '5px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        <Printer size={12} />
+                      </button>
+
+                      <button
+                        type="button"
+                        title="Download PDF to Computer"
                         onClick={() => handleDownloadPdf(inv)}
                         style={{
                           background: '#EEF2FF',
@@ -3228,6 +3575,48 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                       >
                         <Download size={12} /> PDF
                       </button>
+
+                      <button
+                        type="button"
+                        title="Send WhatsApp Bill to Customer"
+                        onClick={() => {
+                          const clean = cleanPhoneNumber(inv.customerMobile);
+                          if (!clean || clean.length < 10) {
+                            showToast('No customer phone number found in this bill');
+                            return;
+                          }
+                          const msg = buildWhatsAppBillMessage(inv, company);
+                          const res = openWhatsAppChat(clean, msg);
+                          if (setWhatsappModal) {
+                            setWhatsappModal({
+                              isOpen: true,
+                              phone: clean,
+                              customerName: inv.customerName,
+                              billNo: inv.billNo,
+                              netAmount: inv.netAmount,
+                              waUrl: res.waUrl,
+                              message: msg,
+                              popupBlocked: res.popupBlocked
+                            });
+                          }
+                        }}
+                        style={{
+                          background: '#DCFCE7',
+                          border: '1px solid #BBF7D0',
+                          color: '#16A34A',
+                          padding: '5px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        <Share2 size={12} /> WhatsApp
+                      </button>
+
                       <button
                         type="button"
                         title="Delete bill and restore stock in TiDB"
