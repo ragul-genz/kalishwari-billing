@@ -1,43 +1,42 @@
 // TiDB Cloud API client for Sri Kaliswari Crackers Billing POS
 
-let currentApiBase = '/api';
+let currentApiBase = null;
 
-async function getApiBase() {
-  if (currentApiBase !== '/api') return currentApiBase;
-  try {
-    const res = await fetch('/api/health');
-    if (res.ok) {
-      currentApiBase = '/api';
-      return currentApiBase;
-    }
-  } catch (err) {
-    // Relative /api failed, check port 3000 or 5000
+export async function getApiBase() {
+  if (currentApiBase) return currentApiBase;
+
+  const candidates = [
+    '/api',
+    'http://localhost:5000/api',
+    'http://localhost:3000/api'
+  ];
+
+  for (const base of candidates) {
     try {
-      const res3000 = await fetch('http://localhost:3000/api/health');
-      if (res3000.ok) {
-        currentApiBase = 'http://localhost:3000/api';
-        return currentApiBase;
-      }
-    } catch (e2) {
-      try {
-        const res5000 = await fetch('http://localhost:5000/api/health');
-        if (res5000.ok) {
-          currentApiBase = 'http://localhost:5000/api';
-          return currentApiBase;
+      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(2500) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.ok) {
+          currentApiBase = base;
+          return base;
         }
-      } catch (e3) {}
+      }
+    } catch (e) {
+      // try next candidate
     }
   }
-  return currentApiBase;
+
+  return '/api';
 }
 
 async function apiFetch(endpoint, options = {}) {
   const base = await getApiBase();
   try {
-    return await fetch(`${base}${endpoint}`, options);
+    const res = await fetch(`${base}${endpoint}`, options);
+    if (res.ok) return res;
+    throw new Error(`API returned HTTP ${res.status}`);
   } catch (err) {
-    // Try alternate port on network failure
-    const alternates = ['http://localhost:3000/api', 'http://localhost:5000/api', '/api'].filter(b => b !== base);
+    const alternates = ['http://localhost:5000/api', 'http://localhost:3000/api', '/api'].filter(b => b !== base);
     for (const alt of alternates) {
       try {
         const altRes = await fetch(`${alt}${endpoint}`, options);
@@ -45,7 +44,7 @@ async function apiFetch(endpoint, options = {}) {
           currentApiBase = alt;
           return altRes;
         }
-      } catch (altErr) {}
+      } catch (e2) {}
     }
     throw err;
   }
@@ -53,9 +52,25 @@ async function apiFetch(endpoint, options = {}) {
 
 export async function checkDbStatus() {
   try {
-    const res = await apiFetch('/health');
-    if (!res.ok) throw new Error('Database unreachable');
-    return await res.json();
+    const base = await getApiBase();
+    const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok) return data;
+    }
+    if (base !== 'http://localhost:5000/api') {
+      try {
+        const alt5000 = await fetch('http://localhost:5000/api/health', { signal: AbortSignal.timeout(3000) });
+        if (alt5000.ok) {
+          const d = await alt5000.json();
+          if (d && d.ok) {
+            currentApiBase = 'http://localhost:5000/api';
+            return d;
+          }
+        }
+      } catch (e) {}
+    }
+    return { ok: false, error: 'Database unreachable' };
   } catch (err) {
     return { ok: false, error: err.message };
   }

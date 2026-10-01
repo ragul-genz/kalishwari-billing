@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import express from 'express';
+import cors from 'cors';
 import apiRouter from './server/api.js';
 import { initDatabase } from './server/db.js';
 
@@ -16,6 +17,7 @@ function tidbApiPlugin() {
       }
 
       const app = express();
+      app.use(cors());
       app.use(express.json({ limit: '10mb' }));
       app.use('/api', apiRouter);
 
@@ -29,6 +31,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    open: false
+    open: false,
+    cors: true
   }
 });
