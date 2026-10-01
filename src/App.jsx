@@ -40,7 +40,7 @@ import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
 import { formatCurrency, formatNumber, generatePdfDocument } from './utils/pdfGenerator';
 import { PrintableInvoice } from './components/PrintableInvoice';
-import { cleanPhoneNumber, buildWhatsAppBillMessage, openWhatsAppChat } from './utils/whatsapp';
+import { cleanPhoneNumber, openWhatsAppChat, shareInvoicePdf, copyInvoiceImageToClipboard } from './utils/whatsapp';
 
 import {
   checkDbStatus,
@@ -593,11 +593,10 @@ export default function App() {
       console.warn('PDF auto-download error:', err);
     }
 
-    // 2. AUTOMATIC WHATSAPP SHARING TO CUSTOMER MOBILE
+    // 2. AUTOMATIC WHATSAPP INVOICE DISPATCH TO CUSTOMER
     const cleanMobile = cleanPhoneNumber(customerMobile);
     if (cleanMobile && cleanMobile.length >= 10) {
-      const waMsg = buildWhatsAppBillMessage(newInvoice, company);
-      const waResult = openWhatsAppChat(cleanMobile, waMsg);
+      const waResult = openWhatsAppChat(cleanMobile, '');
       setWhatsappModal({
         isOpen: true,
         phone: cleanMobile,
@@ -605,10 +604,10 @@ export default function App() {
         billNo: newInvoice.billNo,
         netAmount: newInvoice.netAmount,
         waUrl: waResult.waUrl,
-        message: waMsg,
+        invoice: newInvoice,
         popupBlocked: waResult.popupBlocked
       });
-      showToast(`Bill #SKC ${billNo} Saved & Sent to WhatsApp (+${cleanMobile})!`);
+      showToast(`Bill #SKC ${billNo} Saved & Ready for WhatsApp (+${cleanMobile})!`);
     } else {
       showToast(`Bill #SKC ${billNo} Saved & Downloaded to Computer!`);
     }
@@ -2153,8 +2152,7 @@ export default function App() {
                     showToast('No valid customer phone number found in this bill');
                     return;
                   }
-                  const waMsg = buildWhatsAppBillMessage(previewInvoice, company);
-                  const waRes = openWhatsAppChat(clean, waMsg);
+                  const waRes = openWhatsAppChat(clean, '');
                   setWhatsappModal({
                     isOpen: true,
                     phone: clean,
@@ -2162,7 +2160,7 @@ export default function App() {
                     billNo: previewInvoice.billNo,
                     netAmount: previewInvoice.netAmount,
                     waUrl: waRes.waUrl,
-                    message: waMsg,
+                    invoice: previewInvoice,
                     popupBlocked: waRes.popupBlocked
                   });
                 }}
@@ -2206,21 +2204,21 @@ export default function App() {
         </>
       )}
 
-      {/* ── PRINT-ONLY CONTAINER FOR NATIVE BROWSER PRINT PREVIEW ────────────── */}
-      <div className="print-only">
+      {/* ── PRINT & SCREENSHOT CONTAINER FOR INVOICE CAPTURE ────────────── */}
+      <div id="printable-invoice-container" className="invoice-offscreen-render">
         <PrintableInvoice
-          invoice={printingInvoice || previewInvoice}
+          invoice={printingInvoice || previewInvoice || whatsappModal?.invoice}
           company={company}
         />
       </div>
 
-      {/* ── WHATSAPP INSTANT ACTION MODAL ─────────────────────────────────────── */}
+      {/* ── WHATSAPP INVOICE ACTION MODAL (DOCUMENT & IMAGE FIRST) ──────────── */}
       {whatsappModal && whatsappModal.isOpen && (
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.7)',
-          backdropFilter: 'blur(5px)',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(6px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -2230,18 +2228,19 @@ export default function App() {
         }}>
           <div style={{
             background: '#FFFFFF',
-            borderRadius: '20px',
+            borderRadius: '24px',
             padding: '28px',
-            width: '460px',
+            width: '490px',
             maxWidth: '100%',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
             border: '1px solid #E2E8F0',
             textAlign: 'center',
             position: 'relative'
           }}>
+            {/* Header Icon */}
             <div style={{
-              width: '60px',
-              height: '60px',
+              width: '64px',
+              height: '64px',
               borderRadius: '50%',
               background: '#DCFCE7',
               color: '#16A34A',
@@ -2249,104 +2248,199 @@ export default function App() {
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 16px auto',
-              fontSize: '28px',
-              boxShadow: '0 4px 14px rgba(22, 163, 74, 0.2)'
+              fontSize: '32px',
+              boxShadow: '0 6px 18px rgba(22, 163, 74, 0.25)'
             }}>
-              💬
+              📄
             </div>
 
-            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: '0 0 6px 0' }}>
-              WhatsApp Bill Dispatched!
+            <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A', margin: '0 0 6px 0' }}>
+              Send Invoice to WhatsApp
             </h3>
-            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 16px 0' }}>
+            <p style={{ fontSize: '13.5px', color: '#64748B', margin: '0 0 16px 0' }}>
               Bill #SKC <b>{whatsappModal.billNo}</b> • <b>{whatsappModal.customerName}</b> (₹{formatNumber(whatsappModal.netAmount)})
             </p>
 
+            {/* Recipient Details */}
             <div style={{
               background: '#F8FAFC',
               border: '1px solid #E2E8F0',
+              borderRadius: '14px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              textAlign: 'left',
+              fontSize: '13px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ color: '#64748B', fontSize: '12px' }}>Customer Mobile:</span>
+                <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#16A34A', padding: '2px 8px', borderRadius: '12px', fontWeight: '700' }}>WhatsApp Ready</span>
+              </div>
+              <div style={{ fontWeight: '800', fontSize: '17px', color: '#16A34A' }}>
+                +{whatsappModal.phone}
+              </div>
+              <div style={{ fontSize: '12px', color: '#475569', marginTop: '6px', lineHeight: '1.4' }}>
+                {whatsappModal.popupBlocked
+                  ? '⚠️ Pop-up blocked by browser. Click "Open WhatsApp Chat" below.'
+                  : '✓ WhatsApp chat opened cleanly without any text clutter.'}
+              </div>
+            </div>
+
+            {/* Instruction Banner */}
+            <div style={{
+              background: '#EFF6FF',
+              border: '1px solid #BFDBFE',
               borderRadius: '12px',
               padding: '12px 14px',
               marginBottom: '18px',
               textAlign: 'left',
-              fontSize: '12.5px'
+              fontSize: '12.5px',
+              color: '#1E40AF',
+              lineHeight: '1.5'
             }}>
-              <div style={{ color: '#64748B', marginBottom: '3px' }}>Recipient Phone:</div>
-              <div style={{ fontWeight: '800', fontSize: '16px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>+{whatsappModal.phone}</span>
-                <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#16A34A', padding: '1px 7px', borderRadius: '10px' }}>Customer</span>
+              <div style={{ fontWeight: '800', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>💡</span> <span>How to send the Invoice in WhatsApp Web:</span>
               </div>
-              <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '6px' }}>
-                {whatsappModal.popupBlocked
-                  ? '⚠️ Your browser blocked the pop-up window. Click the green button below to open WhatsApp chat.'
-                  : '✓ WhatsApp chat opened in a new tab with the formatted bill message.'}
-              </div>
+              <div><b>1. Click "Copy Invoice Image"</b> then press <b>Ctrl + V</b> in WhatsApp chat!</div>
+              <div><b>2. OR Drag & Drop</b> the downloaded PDF file directly into WhatsApp!</div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <a
-                href={whatsappModal.waUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              {/* Button 1: Share Invoice PDF Document (Native Web Share) */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (whatsappModal.invoice) {
+                    const res = await shareInvoicePdf(whatsappModal.invoice, company);
+                    if (res.success) {
+                      showToast('Invoice PDF shared successfully!');
+                    } else if (res.notSupported) {
+                      showToast('Opening WhatsApp Chat. Use Ctrl + V to send the invoice!');
+                      window.open(whatsappModal.waUrl, '_blank');
+                    } else {
+                      showToast(res.error || 'Could not trigger share');
+                    }
+                  }
+                }}
                 style={{
-                  background: '#25D366',
+                  background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
                   color: '#FFFFFF',
-                  textDecoration: 'none',
-                  padding: '12px 20px',
-                  borderRadius: '10px',
+                  border: 'none',
+                  padding: '13px 20px',
+                  borderRadius: '12px',
                   fontWeight: '800',
                   fontSize: '14px',
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)'
+                  boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)'
                 }}
               >
-                📲 Open Customer WhatsApp Chat
-              </a>
+                <Share2 size={17} /> 📤 Share Invoice PDF Document
+              </button>
+
+              {/* Button 2: Copy Invoice Image for Ctrl + V in WhatsApp */}
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await copyInvoiceImageToClipboard('printable-invoice-container');
+                    showToast('✓ Invoice Image copied! Now press Ctrl + V in WhatsApp chat.');
+                  } catch (e) {
+                    showToast('Could not copy image directly. Please drag the downloaded PDF into WhatsApp!');
+                  }
+                }}
+                style={{
+                  background: '#3B82F6',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '12px 18px',
+                  borderRadius: '12px',
+                  fontWeight: '800',
+                  fontSize: '13.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                }}
+              >
+                <Copy size={16} /> 📋 Copy Invoice Image (Ctrl + V in WhatsApp)
+              </button>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* Button 3: Open Clean WhatsApp Chat */}
+                <a
+                  href={whatsappModal.waUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: '#F0FDF4',
+                    border: '1px solid #86EFAC',
+                    color: '#15803D',
+                    textDecoration: 'none',
+                    padding: '10px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <ExternalLink size={14} /> Open Chat
+                </a>
+
+                {/* Button 4: Download PDF */}
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(whatsappModal.message);
-                    showToast('WhatsApp bill message copied to clipboard!');
+                    if (whatsappModal.invoice) {
+                      const doc = generatePdfDocument(whatsappModal.invoice, company);
+                      const safeName = (whatsappModal.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+                      doc.save(`Sri_Kaliswari_Bill_SKC_${whatsappModal.billNo}_${safeName}.pdf`);
+                      showToast('PDF downloaded to Downloads folder!');
+                    }
                   }}
                   style={{
                     background: '#F1F5F9',
                     border: '1px solid #CBD5E1',
                     color: '#334155',
                     padding: '10px',
-                    borderRadius: '8px',
+                    borderRadius: '10px',
                     fontWeight: '700',
-                    fontSize: '12px',
+                    fontSize: '12.5px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '4px'
+                    gap: '6px'
                   }}
                 >
-                  <Copy size={13} /> Copy Message
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWhatsappModal(null)}
-                  style={{
-                    background: '#F8FAFC',
-                    border: '1px solid #CBD5E1',
-                    color: '#64748B',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Close
+                  <Download size={14} /> Download PDF
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setWhatsappModal(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94A3B8',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  marginTop: '4px'
+                }}
+              >
+                Close Window
+              </button>
             </div>
           </div>
         </div>
@@ -3588,8 +3682,7 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                             showToast('No customer phone number found in this bill');
                             return;
                           }
-                          const msg = buildWhatsAppBillMessage(inv, company);
-                          const res = openWhatsAppChat(clean, msg);
+                          const res = openWhatsAppChat(clean, '');
                           if (setWhatsappModal) {
                             setWhatsappModal({
                               isOpen: true,
@@ -3598,7 +3691,7 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                               billNo: inv.billNo,
                               netAmount: inv.netAmount,
                               waUrl: res.waUrl,
-                              message: msg,
+                              invoice: inv,
                               popupBlocked: res.popupBlocked
                             });
                           }

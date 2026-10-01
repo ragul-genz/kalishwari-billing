@@ -108,3 +108,23 @@ button, input, select, textarea {
 .print-only {
   display: none;
 }
+
+.invoice-offscreen-render {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 794px;
+  background: #ffffff;
+  z-index: -100;
+  opacity: 1;
+  pointer-events: none;
+}
+
+@media print {
+  .invoice-offscreen-render {
+    display: block !important;
+    position: static !important;
+    left: auto !important;
+    width: 100% !important;
+  }
+}
