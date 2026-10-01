@@ -11,16 +11,50 @@ export function cleanPhoneNumber(phone) {
   return digits;
 }
 
+// Generate formatted official WhatsApp message text with bill summary
+export function createInvoiceWhatsAppMessage(invoice, company) {
+  const storeName = company?.name || 'SRI KALISWARI CRACKERS, SIVAKASI';
+  let msg = `✨ *${storeName}* ✨\n`;
+  msg += `🧾 *OFFICIAL BILL: #SKC ${invoice.billNo || 1}*\n`;
+  msg += `📅 Date: ${invoice.billDate || new Date().toLocaleDateString('en-GB')}\n`;
+  msg += `👤 Customer: *${invoice.customerName || 'Valued Customer'}*\n`;
+  msg += `----------------------------------------\n`;
+  msg += `📦 *CRACKERS PURCHASED:*\n`;
+
+  const items = invoice.items || [];
+  items.slice(0, 18).forEach((it, idx) => {
+    const qty = it.qty || 1;
+    const rate = Number(it.rate || it.mrp || 0).toFixed(2);
+    const amount = Number(it.amount || (qty * rate)).toFixed(2);
+    msg += `${idx + 1}. *${it.name}*\n   Qty: ${qty} ${it.content || 'Box'} × ₹${rate} = ₹${amount}\n`;
+  });
+  if (items.length > 18) {
+    msg += `...and ${items.length - 18} more items in detailed PDF.\n`;
+  }
+
+  msg += `----------------------------------------\n`;
+  if (Number(invoice.discountPercent) > 0) {
+    msg += `🏷️ Discount: ${invoice.discountPercent}%\n`;
+  }
+  msg += `💵 *NET TOTAL: ₹${Number(invoice.netAmount || 0).toFixed(2)} (PAID ✓)*\n`;
+  msg += `----------------------------------------\n`;
+  if (company?.mobile) msg += `📞 Store Helpline: ${company.mobile}\n`;
+  if (company?.address) msg += `📍 Address: ${company.address}\n`;
+  msg += `\n📄 _Your Official PDF Invoice is attached / downloaded._\n`;
+  msg += `🙏 *Thank you for your purchase!* Wishing you a joyous and safe Diwali! 🪔✨`;
+  return msg;
+}
+
 export function openWhatsAppChat(phone, message = '') {
   const clean = cleanPhoneNumber(phone);
   if (!clean || clean.length < 10) {
     return { ok: false, reason: 'Invalid or missing mobile number' };
   }
-  // Open clean chat with no message when message is empty
+  // Open WhatsApp Web or API with pre-filled message text
   const waUrl = message
     ? `https://api.whatsapp.com/send?phone=${clean}&text=${encodeURIComponent(message)}`
     : `https://api.whatsapp.com/send?phone=${clean}`;
-  
+
   try {
     const win = window.open(waUrl, '_blank');
     const blocked = !win || win.closed || typeof win.closed === 'undefined';
@@ -42,8 +76,8 @@ export async function shareInvoicePdf(invoice, company) {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         files: [file],
-        title: `Invoice #${invoice.billNo}`,
-        text: `Sri Kaliswari Crackers - Invoice #${invoice.billNo}`
+        title: `Sri Kaliswari Crackers - Invoice #${invoice.billNo}`,
+        text: `Official PDF Invoice for ${invoice.customerName || 'Customer'} - Net Amount: Rs.${invoice.netAmount}`
       });
       return { success: true };
     }
@@ -91,4 +125,3 @@ export async function copyInvoiceImageToClipboard(elementId = 'printable-invoice
     }, 'image/png');
   });
 }
-

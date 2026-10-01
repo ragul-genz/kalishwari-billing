@@ -54,7 +54,7 @@ import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
 import { formatCurrency, formatNumber, generatePdfDocument } from './utils/pdfGenerator';
 import { PrintableInvoice } from './components/PrintableInvoice';
-import { cleanPhoneNumber, openWhatsAppChat, shareInvoicePdf, copyInvoiceImageToClipboard } from './utils/whatsapp';
+import { cleanPhoneNumber, openWhatsAppChat, shareInvoicePdf, copyInvoiceImageToClipboard, createInvoiceWhatsAppMessage } from './utils/whatsapp';
 import { PriceListView } from './components/PriceListView';
 import { StockAlertsView } from './components/StockAlertsView';
 
@@ -555,6 +555,9 @@ export default function App() {
       } else if (e.key === 'F5') {
         e.preventDefault();
         handleSaveAndPrint(true);
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        handleSaveAndPrint(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -679,7 +682,8 @@ export default function App() {
           });
       }
 
-      const waResult = openWhatsAppChat(cleanMobile, '');
+      const invoiceMsg = createInvoiceWhatsAppMessage(newInvoice, company);
+      const waResult = openWhatsAppChat(cleanMobile, invoiceMsg);
       setWhatsappModal({
         isOpen: true,
         phone: cleanMobile,
@@ -1219,6 +1223,7 @@ export default function App() {
                 <span className="qb-key-item"><span className="qb-key-badge">F3</span> Customer</span>
                 <span className="qb-key-item"><span className="qb-key-badge">F4</span> Product Search</span>
                 <span className="qb-key-item"><span className="qb-key-badge">F5</span> Save & Print</span>
+                <span className="qb-key-item"><span className="qb-key-badge">F6</span> Save & PDF</span>
               </div>
             </div>
 
@@ -1914,7 +1919,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Action Buttons (Save & Print, Save Only, Clear Bill Screen) */}
+                {/* Action Buttons (Save & Print, Save & Download PDF, Save & WhatsApp, Clear Bill Screen) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
                   <button
                     onClick={() => handleSaveAndPrint(true)}
@@ -1922,10 +1927,10 @@ export default function App() {
                       background: '#FF6B35',
                       color: '#FFF',
                       border: 'none',
-                      padding: '14px',
+                      padding: '13px',
                       borderRadius: '10px',
                       fontWeight: '800',
-                      fontSize: '15px',
+                      fontSize: '14px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1935,29 +1940,61 @@ export default function App() {
                       transition: 'all 0.2s'
                     }}
                   >
-                    <Printer size={19} /> SAVE & PRINT BILL (F5)
+                    <Printer size={18} /> SAVE &amp; PRINT BILL (F5)
                   </button>
 
-                  <button
-                    onClick={() => handleSaveAndPrint(false)}
-                    style={{
-                      background: '#10B981',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      fontWeight: '700',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
-                    }}
-                  >
-                    <Check size={16} /> Save Only
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      onClick={() => handleSaveAndPrint(false)}
+                      title="Save bill and download PDF to computer"
+                      style={{
+                        background: '#0F172A',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '11px',
+                        borderRadius: '8px',
+                        fontWeight: '700',
+                        fontSize: '12.5px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(15, 23, 42, 0.25)'
+                      }}
+                    >
+                      <Download size={15} /> Save &amp; PDF (F6)
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (!customerMobile || customerMobile.trim().length < 10) {
+                          showToast('Please enter customer mobile number to send WhatsApp!');
+                          customerMobileRef.current?.focus();
+                          return;
+                        }
+                        handleSaveAndPrint(false);
+                      }}
+                      title="Save and dispatch invoice to customer WhatsApp"
+                      style={{
+                        background: '#16A34A',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '11px',
+                        borderRadius: '8px',
+                        fontWeight: '700',
+                        fontSize: '12.5px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)'
+                      }}
+                    >
+                      <Share2 size={15} /> WhatsApp PDF
+                    </button>
+                  </div>
 
                   <button
                     onClick={handleResetBill}
@@ -1965,10 +2002,10 @@ export default function App() {
                       background: '#FFFFFF',
                       color: '#EF4444',
                       border: '1px solid #FECACA',
-                      padding: '11px',
+                      padding: '10px',
                       borderRadius: '8px',
                       fontWeight: '700',
-                      fontSize: '13px',
+                      fontSize: '12.5px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1976,7 +2013,7 @@ export default function App() {
                       gap: '6px'
                     }}
                   >
-                    <RefreshCw size={15} /> Clear Bill Screen
+                    <Trash2 size={15} /> Clear Bill Form
                   </button>
                 </div>
 
@@ -2382,7 +2419,8 @@ export default function App() {
                     showToast('No valid customer phone number found in this bill');
                     return;
                   }
-                  const waRes = openWhatsAppChat(clean, '');
+                  const invoiceMsg = createInvoiceWhatsAppMessage(previewInvoice, company);
+                  const waRes = openWhatsAppChat(clean, invoiceMsg);
                   setWhatsappModal({
                     isOpen: true,
                     phone: clean,
@@ -4856,7 +4894,8 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                             showToast('No customer phone number found in this bill');
                             return;
                           }
-                          const res = openWhatsAppChat(clean, '');
+                          const invoiceMsg = createInvoiceWhatsAppMessage(inv, company);
+                          const res = openWhatsAppChat(clean, invoiceMsg);
                           if (setWhatsappModal) {
                             setWhatsappModal({
                               isOpen: true,
