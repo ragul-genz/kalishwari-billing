@@ -657,19 +657,22 @@ export default function App() {
               borderRadius: '999px',
               fontSize: '11px',
               fontWeight: '700',
-              background: dbConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-              border: `1px solid ${dbConnected ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
-              color: dbConnected ? '#34D399' : '#F87171'
-            }}>
+              background: dbConnected === true ? 'rgba(16, 185, 129, 0.15)' : dbConnected === false ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              border: `1px solid ${dbConnected === true ? 'rgba(16, 185, 129, 0.35)' : dbConnected === false ? 'rgba(239, 68, 68, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+              color: dbConnected === true ? '#34D399' : dbConnected === false ? '#F87171' : '#FBBF24',
+              cursor: 'pointer'
+            }}
+            onClick={refreshDbStatus}
+            title={dbConnected === true ? 'TiDB Cloud MySQL is Online & Connected. Click to recheck.' : 'Click to retry connection to TiDB Cloud'}>
               <span style={{
                 width: '7px',
                 height: '7px',
                 borderRadius: '50%',
-                background: dbConnected ? '#10B981' : '#EF4444',
-                boxShadow: dbConnected ? '0 0 6px #10B981' : 'none'
+                background: dbConnected === true ? '#10B981' : dbConnected === false ? '#EF4444' : '#F59E0B',
+                boxShadow: dbConnected === true ? '0 0 6px #10B981' : 'none'
               }}></span>
               <Database size={12} />
-              <span>TiDB Cloud: {dbConnected ? 'Online (kalishwaribilling)' : 'Connecting / Local'}</span>
+              <span>TiDB Cloud: {dbConnected === true ? 'Online (kalishwaribilling)' : dbConnected === false ? 'Offline / Local' : 'Connecting...'}</span>
             </div>
           </div>
 

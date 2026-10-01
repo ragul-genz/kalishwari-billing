@@ -1,10 +1,59 @@
 // TiDB Cloud API client for Sri Kaliswari Crackers Billing POS
 
-const API_BASE = '/api';
+let currentApiBase = '/api';
+
+async function getApiBase() {
+  if (currentApiBase !== '/api') return currentApiBase;
+  try {
+    const res = await fetch('/api/health');
+    if (res.ok) {
+      currentApiBase = '/api';
+      return currentApiBase;
+    }
+  } catch (err) {
+    // Relative /api failed, check port 3000 or 5000
+    try {
+      const res3000 = await fetch('http://localhost:3000/api/health');
+      if (res3000.ok) {
+        currentApiBase = 'http://localhost:3000/api';
+        return currentApiBase;
+      }
+    } catch (e2) {
+      try {
+        const res5000 = await fetch('http://localhost:5000/api/health');
+        if (res5000.ok) {
+          currentApiBase = 'http://localhost:5000/api';
+          return currentApiBase;
+        }
+      } catch (e3) {}
+    }
+  }
+  return currentApiBase;
+}
+
+async function apiFetch(endpoint, options = {}) {
+  const base = await getApiBase();
+  try {
+    return await fetch(`${base}${endpoint}`, options);
+  } catch (err) {
+    // Try alternate port on network failure
+    const alternates = ['http://localhost:3000/api', 'http://localhost:5000/api', '/api'].filter(b => b !== base);
+    for (const alt of alternates) {
+      try {
+        const altRes = await fetch(`${alt}${endpoint}`, options);
+        if (altRes.ok) {
+          currentApiBase = alt;
+          return altRes;
+        }
+      } catch (altErr) {}
+    }
+    throw err;
+  }
+}
 
 export async function checkDbStatus() {
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const res = await apiFetch('/health');
     if (!res.ok) throw new Error('Database unreachable');
     return await res.json();
   } catch (err) {
@@ -14,7 +63,7 @@ export async function checkDbStatus() {
 
 export async function fetchYears() {
   try {
-    const res = await fetch(`${API_BASE}/years`);
+    const res = await apiFetch('/years');
     if (!res.ok) throw new Error('Failed to fetch years');
     return await res.json();
   } catch (err) {
@@ -25,7 +74,7 @@ export async function fetchYears() {
 
 export async function createYear(year) {
   try {
-    const res = await fetch(`${API_BASE}/years`, {
+    const res = await apiFetch('/years', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ year })
@@ -38,7 +87,7 @@ export async function createYear(year) {
 
 export async function fetchCompany() {
   try {
-    const res = await fetch(`${API_BASE}/company`);
+    const res = await apiFetch('/company');
     if (!res.ok) throw new Error('Failed to fetch company');
     return await res.json();
   } catch (err) {
@@ -49,7 +98,7 @@ export async function fetchCompany() {
 
 export async function saveCompany(companyData) {
   try {
-    const res = await fetch(`${API_BASE}/company`, {
+    const res = await apiFetch('/company', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(companyData)
@@ -62,7 +111,7 @@ export async function saveCompany(companyData) {
 
 export async function fetchProducts(year) {
   try {
-    const res = await fetch(`${API_BASE}/products?year=${encodeURIComponent(year)}`);
+    const res = await apiFetch(`/products?year=${encodeURIComponent(year)}`);
     if (!res.ok) throw new Error('Failed to fetch products');
     return await res.json();
   } catch (err) {
@@ -73,7 +122,7 @@ export async function fetchProducts(year) {
 
 export async function addProduct(product) {
   try {
-    const res = await fetch(`${API_BASE}/products`, {
+    const res = await apiFetch('/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(product)
@@ -87,7 +136,7 @@ export async function addProduct(product) {
 
 export async function updateProduct(id, product) {
   try {
-    const res = await fetch(`${API_BASE}/products/${id}`, {
+    const res = await apiFetch(`/products/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(product)
@@ -101,7 +150,7 @@ export async function updateProduct(id, product) {
 
 export async function deleteProduct(id) {
   try {
-    const res = await fetch(`${API_BASE}/products/${id}`, {
+    const res = await apiFetch(`/products/${id}`, {
       method: 'DELETE'
     });
     return await res.json();
@@ -113,7 +162,7 @@ export async function deleteProduct(id) {
 
 export async function fetchCustomers(year) {
   try {
-    const res = await fetch(`${API_BASE}/customers?year=${encodeURIComponent(year)}`);
+    const res = await apiFetch(`/customers?year=${encodeURIComponent(year)}`);
     if (!res.ok) throw new Error('Failed to fetch customers');
     return await res.json();
   } catch (err) {
@@ -124,7 +173,7 @@ export async function fetchCustomers(year) {
 
 export async function addCustomer(customer) {
   try {
-    const res = await fetch(`${API_BASE}/customers`, {
+    const res = await apiFetch('/customers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(customer)
@@ -138,7 +187,7 @@ export async function addCustomer(customer) {
 
 export async function updateCustomer(id, customer) {
   try {
-    const res = await fetch(`${API_BASE}/customers/${id}`, {
+    const res = await apiFetch(`/customers/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(customer)
@@ -152,7 +201,7 @@ export async function updateCustomer(id, customer) {
 
 export async function deleteCustomer(id) {
   try {
-    const res = await fetch(`${API_BASE}/customers/${id}`, {
+    const res = await apiFetch(`/customers/${id}`, {
       method: 'DELETE'
     });
     return await res.json();
@@ -164,7 +213,7 @@ export async function deleteCustomer(id) {
 
 export async function fetchInvoices(year) {
   try {
-    const res = await fetch(`${API_BASE}/invoices?year=${encodeURIComponent(year)}`);
+    const res = await apiFetch(`/invoices?year=${encodeURIComponent(year)}`);
     if (!res.ok) throw new Error('Failed to fetch invoices');
     return await res.json();
   } catch (err) {
@@ -175,7 +224,7 @@ export async function fetchInvoices(year) {
 
 export async function saveInvoice(invoiceData) {
   try {
-    const res = await fetch(`${API_BASE}/invoices`, {
+    const res = await apiFetch('/invoices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(invoiceData)
@@ -189,7 +238,7 @@ export async function saveInvoice(invoiceData) {
 
 export async function deleteInvoice(billNo, year) {
   try {
-    const res = await fetch(`${API_BASE}/invoices/${billNo}?year=${encodeURIComponent(year)}`, {
+    const res = await apiFetch(`/invoices/${billNo}?year=${encodeURIComponent(year)}`, {
       method: 'DELETE'
     });
     return await res.json();
@@ -201,7 +250,7 @@ export async function deleteInvoice(billNo, year) {
 
 export async function clearAllInvoices(year) {
   try {
-    const res = await fetch(`${API_BASE}/invoices-all?year=${encodeURIComponent(year)}`, {
+    const res = await apiFetch(`/invoices-all?year=${encodeURIComponent(year)}`, {
       method: 'DELETE'
     });
     return await res.json();
@@ -213,7 +262,7 @@ export async function clearAllInvoices(year) {
 
 export async function syncLocalStorageToDb(payload) {
   try {
-    const res = await fetch(`${API_BASE}/sync/import`, {
+    const res = await apiFetch('/sync/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -227,7 +276,7 @@ export async function syncLocalStorageToDb(payload) {
 
 export async function fetchStats(year) {
   try {
-    const res = await fetch(`${API_BASE}/stats?year=${encodeURIComponent(year)}`);
+    const res = await apiFetch(`/stats?year=${encodeURIComponent(year)}`);
     if (!res.ok) throw new Error('Failed to fetch stats');
     return await res.json();
   } catch (err) {
