@@ -1,5 +1,12 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable, { applyPlugin } from 'jspdf-autotable';
+
+// Ensure autoTable plugin is registered on jsPDF class
+try {
+  if (typeof applyPlugin === 'function') {
+    applyPlugin(jsPDF);
+  }
+} catch (e) {}
 
 export const formatCurrency = (amount) => {
   const num = Number(amount) || 0;
@@ -195,7 +202,7 @@ export const generatePdfDocument = (billData, company) => {
     formatNumber(item.qty * item.rate),
   ]);
 
-  doc.autoTable({
+  const tableOptions = {
     startY: y,
     head: [['S.N', 'Cracker Name', 'Qty', 'MRP (₹)', 'Disc.%', 'Amount (₹)']],
     body: tableRows,
@@ -225,9 +232,17 @@ export const generatePdfDocument = (billData, company) => {
     },
     alternateRowStyles: { fillColor: [249, 249, 255] },
     margin: { left: lm, right: rm },
-  });
+  };
 
-  y = doc.lastAutoTable.finalY + 0;
+  if (typeof doc.autoTable === 'function') {
+    doc.autoTable(tableOptions);
+  } else if (typeof autoTable === 'function') {
+    autoTable(doc, tableOptions);
+  } else if (autoTable && typeof autoTable.default === 'function') {
+    autoTable.default(doc, tableOptions);
+  }
+
+  y = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY : (y + 35);
 
   // Total Qty summary row
   doc.setFillColor(235, 235, 250);
