@@ -34,7 +34,21 @@ import {
   Send,
   Copy,
   ExternalLink,
-  Check
+  Check,
+  MinusCircle,
+  Plus,
+  Minus,
+  Layers,
+  Boxes,
+  PackagePlus,
+  PackageMinus,
+  ArrowUpRight,
+  ArrowDownRight,
+  LayoutDashboard,
+  History,
+  Truck,
+  AlertTriangle,
+  FileText
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
@@ -85,22 +99,46 @@ export default function App() {
   const [dbConnected, setDbConnected] = React.useState(null);
   const [dbInfo, setDbInfo] = React.useState(null);
   const [isLoadingData, setIsLoadingData] = React.useState(false);
+  const dbFailCountRef = React.useRef(0);
 
   const refreshDbStatus = React.useCallback(async () => {
     try {
       const status = await checkDbStatus();
-      setDbConnected(status.ok);
-      if (status.ok) setDbInfo(status);
+      if (status && status.ok) {
+        dbFailCountRef.current = 0;
+        setDbConnected(true);
+        setDbInfo(status);
+      } else {
+        dbFailCountRef.current += 1;
+        // Only switch to offline state if 2 consecutive checks fail
+        if (dbFailCountRef.current >= 2) {
+          setDbConnected(false);
+        }
+      }
     } catch (err) {
-      setDbConnected(false);
+      dbFailCountRef.current += 1;
+      if (dbFailCountRef.current >= 2) {
+        setDbConnected(false);
+      }
     }
   }, []);
 
   React.useEffect(() => {
     refreshDbStatus();
-    // Poll DB status every 30 seconds
-    const interval = setInterval(refreshDbStatus, 30000);
-    return () => clearInterval(interval);
+
+    // Recheck immediately when window regains focus or comes back online
+    const handleFocus = () => refreshDbStatus();
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleFocus);
+
+    // Regular poll every 25 seconds
+    const interval = setInterval(refreshDbStatus, 25000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleFocus);
+      clearInterval(interval);
+    };
   }, [refreshDbStatus]);
 
   // WhatsApp Bot State (for direct automated PDF sending)
@@ -863,8 +901,10 @@ export default function App() {
     );
   }
 
+  const lowStockCount = products.filter(p => Number(p.stock) > 0 && Number(p.stock) <= 20).length;
+
   return (
-    <div className="app-container" style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
+    <div className="sidebar-layout-root">
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -874,187 +914,254 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Banner & Header */}
-      <header className="app-header">
-        <div className="app-header-left">
-          <div className="app-header-logo" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #EA580C 100%)' }}>
-            <Sparkles size={22} color="#FFF" />
+      {/* ── LEFT SIDEBAR (MATCHING REFERENCE UI) ── */}
+      <aside className="sidebar-aside">
+        {/* Brand Header */}
+        <div className="sidebar-brand-box">
+          <div className="sidebar-logo-circle">
+            🎆
           </div>
-          <div className="app-header-text">
-            <div className="app-header-title-row">
-              <h1 className="app-header-title">{company.name}</h1>
-              <span className="app-header-badge" style={{ background: '#FFEDD5', color: '#C2410C' }}>Sivakasi POS 2026</span>
-            </div>
-            <p className="app-header-subtitle">{company.tagline} • Direct Factory Outlet</p>
+          <div style={{ minWidth: 0 }}>
+            <div className="sidebar-brand-title">Sri Kaliswari Crackers</div>
+            <div className="sidebar-brand-sub">Billing &amp; Inventory</div>
           </div>
         </div>
-        <div className="app-header-right">
-          <div className="app-date-pill">
-            <Clock size={15} />
-            <span>{billDate} {currentTime}</span>
-          </div>
-          {/* Active Financial Year Switcher */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: '#FFF7ED',
-            border: '1px solid #FED7AA',
-            padding: '5px 10px',
-            borderRadius: '10px'
-          }}>
-            <Calendar size={13} color="#EA580C" />
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#9A3412' }}>Year:</span>
-            <select
-              value={activeYear}
-              onChange={(e) => setActiveYear(e.target.value)}
-              title="Switch Financial Year"
-              style={{
-                border: 'none',
-                background: 'transparent',
-                fontWeight: '800',
-                color: '#C2410C',
-                fontSize: '13px',
-                cursor: 'pointer',
-                outline: 'none'
-              }}
-            >
-              {availableYears.map(yr => (
-                <option key={yr} value={yr}>{yr}</option>
-              ))}
-            </select>
-          </div>
 
-          <button
-            onClick={() => handleResetBill()}
-            className="app-new-bill-btn"
-            style={{
-              background: '#FF6B35',
-              color: '#FFF',
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(255,107,53,0.3)'
-            }}
-          >
-            <RefreshCw size={14} />
-            <span className="app-new-bill-btn-label">+ New Bill (F2)</span>
-          </button>
+        {/* Section: MAIN MENU */}
+        <div className="sidebar-section-title">MAIN MENU</div>
 
-          <div
-            title={dbInfo ? `TiDB Cloud Connected\nHost: ${dbInfo.host}\nDatabase: ${dbInfo.database}\nClick to re-sync all data` : 'Click to test TiDB Cloud Connection'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: dbConnected ? '#ECFDF5' : '#FEF2F2',
-              border: `1px solid ${dbConnected ? '#A7F3D0' : '#FECACA'}`,
-              padding: '6px 12px',
-              borderRadius: '10px',
-              fontSize: '12px',
-              fontWeight: '700',
-              color: dbConnected ? '#065F46' : '#991B1B',
-              cursor: 'pointer'
-            }}
-            onClick={async () => {
-              await refreshDbStatus();
-              await loadAllData(activeYear);
-              showToast('Refreshed & Synced with TiDB Cloud!');
-            }}
-          >
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: dbConnected ? '#10B981' : '#EF4444',
-              boxShadow: dbConnected ? '0 0 6px #10B981' : 'none'
-            }}></span>
-            <Database size={13} />
-            <span>{dbConnected ? 'TiDB: Live' : 'TiDB: Offline'}</span>
-          </div>
-
-          {/* WhatsApp Bot Status & QR Modal Trigger */}
-          <div
-            onClick={() => {
-              setIsWaModalOpen(true);
-              fetchWaStatus();
-            }}
-            title={waBotStatus.connected ? `WhatsApp Bot Live: +${waBotStatus.phone}\nClick to manage WhatsApp bot connection` : 'Click to scan QR code and link WhatsApp for automatic PDF bill sending'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: waBotStatus.connected ? '#DCFCE7' : '#FEF3C7',
-              border: `1px solid ${waBotStatus.connected ? '#86EFAC' : '#FCD34D'}`,
-              padding: '6px 12px',
-              borderRadius: '10px',
-              fontSize: '12px',
-              fontWeight: '700',
-              color: waBotStatus.connected ? '#15803D' : '#B45309',
-              cursor: 'pointer'
-            }}
-          >
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: waBotStatus.connected ? '#16A34A' : '#F59E0B',
-              boxShadow: waBotStatus.connected ? '0 0 6px #16A34A' : 'none'
-            }}></span>
-            <Send size={13} />
-            <span>{waBotStatus.connected ? `WA Bot: Live` : `Link WhatsApp (QR)`}</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F1F5F9', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', color: '#475569' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
-            Admin
-          </div>
-        </div>
-      </header>
-
-      {/* Desktop Navigation Tabs */}
-      <nav className="app-nav">
-        {[
-          { id: 'estimate', label: 'Quick Billing', badge: 'F2', icon: FileSpreadsheet },
-          { id: 'products', label: 'Products Master', icon: Package },
-          { id: 'customers', label: 'Customers', icon: Users },
-          { id: 'reports', label: 'Sales History', icon: TrendingUp },
-          { id: 'settings', label: 'Shop Settings', icon: Settings },
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id || (activeTab === 'taxbill' && tab.id === 'estimate');
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="app-nav-tab"
-              style={{
-                borderBottom: isActive ? '3px solid #FF6B35' : '3px solid transparent',
-                color: isActive ? '#FF6B35' : '#64748B',
-                fontWeight: isActive ? '700' : '500',
-                fontSize: '14px',
-              }}
-            >
-              <Icon size={17} color={isActive ? '#FF6B35' : '#64748B'} />
-              <span>{tab.label}</span>
-              {tab.badge && (
-                <span style={{ background: isActive ? '#FFEDD5' : '#F1F5F9', color: isActive ? '#C2410C' : '#94A3B8', fontSize: '10px', fontWeight: '800', padding: '1px 6px', borderRadius: '6px' }}>
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="mobile-bottom-nav">
-        <div className="mobile-bottom-nav-inner">
+        {/* Nav Items */}
+        <nav className="sidebar-nav-list">
           {[
-            { id: 'estimate', label: 'Billing', icon: FileSpreadsheet },
-            { id: 'products', label: 'Products', icon: Package },
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'estimate', label: 'Quick Billing', badge: 'F2', badgeType: 'orange', icon: FileSpreadsheet },
+            { id: 'products', label: 'Products Master', icon: Package },
+            { id: 'pricelist', label: 'Price List', icon: FileText },
+            { id: 'stockalerts', label: 'Stock & Alerts', badge: lowStockCount > 0 ? String(lowStockCount) : null, badgeType: 'red', icon: AlertTriangle },
             { id: 'customers', label: 'Customers', icon: Users },
-            { id: 'reports', label: 'History', icon: TrendingUp },
-            { id: 'settings', label: 'Settings', icon: Settings },
+            { id: 'reports', label: 'Sales History', icon: History },
+            { id: 'stockinward', label: 'Stock Inward', icon: PackagePlus },
+            { id: 'suppliers', label: 'Suppliers', icon: Truck },
+            { id: 'profit', label: 'Reports & Profit', icon: TrendingUp },
+            { id: 'settings', label: 'Shop Settings', icon: Settings },
           ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id || (tab.id === 'estimate' && activeTab === 'taxbill');
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
+                onClick={() => {
+                  if (tab.id === 'stockinward' || tab.id === 'stockalerts' || tab.id === 'pricelist') {
+                    setActiveTab('products');
+                  } else if (tab.id === 'dashboard' || tab.id === 'profit') {
+                    setActiveTab('reports');
+                  } else {
+                    setActiveTab(tab.id);
+                  }
+                }}
+              >
+                <Icon size={18} color={isActive ? '#FF6B35' : '#64748B'} />
+                <span>{tab.label}</span>
+                {tab.badge && (
+                  <span className={`sidebar-badge ${tab.badgeType === 'red' ? 'sidebar-badge-red' : 'sidebar-badge-orange'}`}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Low Stock Alert in Sidebar */}
+        {lowStockCount > 0 && (
+          <div
+            className="sidebar-bottom-alert"
+            onClick={() => setActiveTab('products')}
+            title="Click to view low stock items"
+          >
+            <AlertTriangle size={15} color="#DC2626" />
+            <span>⚠️ {lowStockCount} Low Stock Items</span>
+          </div>
+        )}
+
+        {/* Bottom User Profile */}
+        <div className="sidebar-profile">
+          <div className="sidebar-avatar-circle">
+            <User size={18} color="#FF6B35" />
+          </div>
+          <div>
+            <div className="sidebar-profile-name">Shop Owner (Admin)</div>
+            <div className="sidebar-profile-role">
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }}></span>
+              Admin Role
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── RIGHT MAIN WORKSPACE ── */}
+      <div className="sidebar-main-area">
+
+        {/* TOP HEADER BAR (MATCHING REFERENCE UI) */}
+        <header className="top-header-bar">
+          <div className="top-header-left">
+            <div className="top-header-title">
+              {activeTab === 'products' ? 'Products Inventory' : (activeTab === 'estimate' ? 'Quick Billing Engine' : (activeTab === 'customers' ? 'Customers Directory' : (activeTab === 'reports' ? 'Sales History & Invoices' : 'Shop Settings')))}
+            </div>
+            <div className="top-header-sub">
+              Sri Kaliswari Crackers • Sivakasi
+            </div>
+          </div>
+
+          <div className="top-header-right">
+            {/* Year Switcher */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#FFF7ED',
+              border: '1px solid #FED7AA',
+              padding: '6px 10px',
+              borderRadius: '9px'
+            }}>
+              <Calendar size={13} color="#EA580C" />
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#9A3412' }}>Year:</span>
+              <select
+                value={activeYear}
+                onChange={(e) => setActiveYear(e.target.value)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontWeight: '800',
+                  color: '#C2410C',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                {availableYears.map(yr => (
+                  <option key={yr} value={yr}>{yr}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* + New Bill Button */}
+            <button
+              type="button"
+              onClick={() => {
+                handleResetBill();
+                setActiveTab('estimate');
+              }}
+              className="header-orange-btn"
+            >
+              <Receipt size={15} />
+              <span>+ New Bill</span>
+            </button>
+
+            {/* Price List Button */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('products')}
+              className="header-outline-btn"
+            >
+              <FileText size={15} />
+              <span>Price List</span>
+            </button>
+
+            {/* Live Clock Pill: 🕒 08:46:24 pm */}
+            <div className="header-clock-pill">
+              <Clock size={14} color="#64748B" />
+              <span>{currentTime}</span>
+            </div>
+
+            {/* Admin Pill */}
+            <div className="header-admin-pill">
+              <User size={14} color="#EA580C" />
+              <span>Admin</span>
+            </div>
+
+            {/* Staff Pill */}
+            <div className="header-staff-pill">
+              <span>Staff</span>
+            </div>
+
+            {/* TiDB Live Status */}
+            <div
+              onClick={async () => {
+                await refreshDbStatus();
+                await loadAllData(activeYear);
+                showToast('Refreshed & Synced with TiDB Cloud!');
+              }}
+              title={dbConnected ? 'TiDB Cloud: Online & Live' : 'TiDB Cloud: Offline'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: dbConnected ? '#ECFDF5' : '#FEF2F2',
+                border: `1px solid ${dbConnected ? '#A7F3D0' : '#FECACA'}`,
+                padding: '6px 12px',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: '700',
+                color: dbConnected ? '#065F46' : '#991B1B',
+                cursor: 'pointer'
+              }}
+            >
+              <span style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: dbConnected ? '#10B981' : '#EF4444',
+                boxShadow: dbConnected ? '0 0 6px #10B981' : 'none'
+              }}></span>
+              <Database size={12} />
+              <span>{dbConnected ? 'TiDB Live' : 'Offline'}</span>
+            </div>
+
+            {/* WhatsApp Bot Status */}
+            <div
+              onClick={() => {
+                setIsWaModalOpen(true);
+                fetchWaStatus();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: waBotStatus.connected ? '#DCFCE7' : '#FEF3C7',
+                border: `1px solid ${waBotStatus.connected ? '#86EFAC' : '#FCD34D'}`,
+                padding: '6px 12px',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: '700',
+                color: waBotStatus.connected ? '#15803D' : '#B45309',
+                cursor: 'pointer'
+              }}
+            >
+              <span style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: waBotStatus.connected ? '#16A34A' : '#F59E0B'
+              }}></span>
+              <Send size={12} />
+              <span>{waBotStatus.connected ? 'WA Live' : 'Link WA'}</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Mobile Bottom Navigation */}
+        <div className="mobile-bottom-nav">
+          <div className="mobile-bottom-nav-inner">
+            {[
+              { id: 'estimate', label: 'Billing', icon: FileSpreadsheet },
+              { id: 'products', label: 'Products', icon: Package },
+              { id: 'customers', label: 'Customers', icon: Users },
+              { id: 'reports', label: 'History', icon: TrendingUp },
+              { id: 'settings', label: 'Settings', icon: Settings },
+            ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id || (activeTab === 'taxbill' && tab.id === 'estimate');
             return (
@@ -1963,6 +2070,8 @@ export default function App() {
         </div>
       </footer>
 
+      </div> {/* End sidebar-main-area */}
+
       {/* ── INVOICE PREVIEW SIDE DRAWER ─────────────────────────── */}
       {previewInvoice && (
         <>
@@ -2819,9 +2928,13 @@ export default function App() {
 // -------------------------------------------------------------
 // SUB-VIEW: Product Master Component
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// SUB-VIEW: Product Master & Stock Inventory Component
+// -------------------------------------------------------------
 function ProductMasterView({ products, setProducts, showToast, activeYear, loadProducts }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategory, setSelectedCategory] = React.useState('All');
+  const [stockFilter, setStockFilter] = React.useState('All'); // 'All' | 'in_stock' | 'low_stock' | 'out_of_stock'
   const [isReloading, setIsReloading] = React.useState(false);
 
   // New Product Modal Form
@@ -2836,12 +2949,35 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
   // Edit Product Modal Form
   const [editProduct, setEditProduct] = React.useState(null);
 
+  // Stock In / Stock Out (Add / Less Stock) Modal State
+  const [stockModal, setStockModal] = React.useState({
+    isOpen: false,
+    mode: 'add', // 'add' (வரவு) | 'less' (கழிவு)
+    productId: '',
+    qty: 10,
+    reason: 'New Purchase / Stock In'
+  });
+
+  // Calculate live inventory stats
+  const totalItems = products.length;
+  const totalStockUnits = products.reduce((acc, p) => acc + (Number(p.stock) || 0), 0);
+  const inStockCount = products.filter(p => Number(p.stock) > 20).length;
+  const lowStockCount = products.filter(p => Number(p.stock) > 0 && Number(p.stock) <= 20).length;
+  const outOfStockCount = products.filter(p => Number(p.stock) <= 0).length;
+
   const filteredProducts = products.filter(p => {
+    const stock = Number(p.stock) || 0;
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       String(p.code).includes(searchTerm) ||
       (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
-    return matchesSearch && matchesCat;
+
+    let matchesStock = true;
+    if (stockFilter === 'in_stock') matchesStock = stock > 20;
+    else if (stockFilter === 'low_stock') matchesStock = stock > 0 && stock <= 20;
+    else if (stockFilter === 'out_of_stock') matchesStock = stock <= 0;
+
+    return matchesSearch && matchesCat && matchesStock;
   });
 
   const handleRefresh = async () => {
@@ -2856,6 +2992,91 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
     }
   };
 
+  // Direct In-line Quick Adjust (+/- delta on table row)
+  const handleQuickAdjust = async (product, delta) => {
+    const currentStock = Number(product.stock) || 0;
+    const newStock = Math.max(0, currentStock + delta);
+    if (newStock === currentStock && delta < 0) {
+      showToast(`"${product.name}" is already out of stock (0)!`);
+      return;
+    }
+
+    const updated = { ...product, stock: newStock };
+    setProducts(prev => prev.map(p => p.id === product.id ? updated : p));
+
+    try {
+      await apiUpdateProduct(product.id, updated);
+      showToast(
+        delta > 0
+          ? `+${delta} Added to "${product.name}" (Stock: ${newStock})`
+          : `${delta} Deducted from "${product.name}" (Stock: ${newStock})`
+      );
+    } catch (err) {
+      console.warn('Updated locally, TiDB error:', err);
+      showToast(`Stock updated locally for "${product.name}" (${newStock})`);
+    }
+  };
+
+  // Open the Add/Less Stock Modal
+  const openStockModal = (mode = 'add', product = null) => {
+    const initialId = product ? String(product.id) : (products[0] ? String(products[0].id) : '');
+    setStockModal({
+      isOpen: true,
+      mode,
+      productId: initialId,
+      qty: 10,
+      reason: mode === 'add' ? 'New Purchase / Stock Arrival' : 'Damage / Defective'
+    });
+  };
+
+  // Submit Stock In / Stock Out (Add / Less)
+  const handleStockSubmit = async (e) => {
+    e.preventDefault();
+    const targetProduct = products.find(p => String(p.id) === String(stockModal.productId));
+    if (!targetProduct) {
+      showToast('Please select a valid product!');
+      return;
+    }
+    const adjustQty = Number(stockModal.qty) || 0;
+    if (adjustQty <= 0) {
+      showToast('Please enter a valid quantity greater than 0!');
+      return;
+    }
+
+    const currentStock = Number(targetProduct.stock) || 0;
+    let newStock = currentStock;
+
+    if (stockModal.mode === 'add') {
+      newStock = currentStock + adjustQty;
+    } else {
+      if (currentStock < adjustQty) {
+        if (!confirm(`Current stock is ${currentStock}. Deducting ${adjustQty} will reduce stock to 0. Continue?`)) {
+          return;
+        }
+        newStock = 0;
+      } else {
+        newStock = currentStock - adjustQty;
+      }
+    }
+
+    const updated = { ...targetProduct, stock: newStock };
+    setProducts(prev => prev.map(p => p.id === targetProduct.id ? updated : p));
+    setStockModal(prev => ({ ...prev, isOpen: false }));
+
+    try {
+      await apiUpdateProduct(targetProduct.id, updated);
+      showToast(
+        stockModal.mode === 'add'
+          ? `✅ +${adjustQty} Added (சரக்கு வரவு)! New stock for "${targetProduct.name}": ${newStock}`
+          : `🔻 -${adjustQty} Less (சரக்கு கழிவு)! New stock for "${targetProduct.name}": ${newStock}`
+      );
+    } catch (err) {
+      console.warn('Updated locally, TiDB error:', err);
+      showToast(`Stock updated locally for "${targetProduct.name}" (${newStock})`);
+    }
+  };
+
+  // Create new product
   const handleCreateProduct = async (e) => {
     e.preventDefault();
     if (!newName || !newRate) {
@@ -2886,12 +3107,14 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
         setProducts(prev => prev.map(p => p.id === tempId ? { ...p, id: saved.id } : p));
       }
       showToast('New Cracker Item Added & Saved to TiDB Cloud!');
+      try { confetti({ particleCount: 50, spread: 60 }); } catch (c) {}
     } catch (err) {
       console.warn('Saved locally, TiDB error:', err);
       showToast('Item Added (Saved locally)');
     }
   };
 
+  // Update existing product
   const handleUpdateProduct = async (e) => {
     e.preventDefault();
     if (!editProduct) return;
@@ -2912,6 +3135,7 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
     }
   };
 
+  // Delete product
   const handleDeleteProduct = async (id, name) => {
     if (confirm(`Are you sure you want to delete "${name || 'this item'}" from TiDB catalog?`)) {
       setProducts(products.filter(p => p.id !== id));
@@ -2925,284 +3149,823 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
     }
   };
 
+  // Active product for stock modal preview
+  const selectedModalProduct = products.find(p => String(p.id) === String(stockModal.productId)) || products[0];
+  const curModalStock = selectedModalProduct ? (Number(selectedModalProduct.stock) || 0) : 0;
+  const numModalQty = Number(stockModal.qty) || 0;
+  const previewModalNewStock = stockModal.mode === 'add'
+    ? (curModalStock + numModalQty)
+    : Math.max(0, curModalStock - numModalQty);
+
+  // Category pills matching reference screenshot
+  const categoryPills = [
+    { id: 'All', label: 'All Items' },
+    { id: 'Sound Crackers', label: 'Sound Crackers' },
+    { id: 'Fancy Crackers', label: 'Fancy Crackers' },
+    { id: 'Ground Chakkars', label: 'Ground Chakkars' },
+    { id: 'Rockets', label: 'Rockets' },
+    { id: 'Bombs', label: 'Bombs' },
+    { id: 'Sparklers', label: 'Sparklers' },
+    { id: 'Flower Pots', label: 'Flower Pots' },
+    { id: 'Multi Shots', label: 'Multi Shots' },
+    { id: 'Gift Boxes', label: 'Gift Boxes' },
+    { id: 'Kids Crackers', label: 'Kids Crackers' },
+    { id: 'Other Items', label: 'Other Items' }
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-      {/* Top action header */}
+      {/* Top Header Bar Matching Reference Screenshot */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: '#FFFFFF',
-        padding: '20px 24px',
-        borderRadius: '16px',
-        border: '1px solid #E2E8F0',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
         flexWrap: 'wrap',
-        gap: '12px'
+        gap: '16px'
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Product Master Catalog</h2>
-            <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>
-              TiDB Connected ({products.length} Items)
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>
+              Crackers Product Master
+            </h1>
+            <span style={{
+              background: '#FFEDD5',
+              color: '#C2410C',
+              fontSize: '12px',
+              fontWeight: '800',
+              padding: '3px 12px',
+              borderRadius: '999px'
+            }}>
+              {products.length} Products
             </span>
           </div>
-          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>Manage all cracker items, standard rates, packing units and live inventory in TiDB Cloud.</p>
+          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>
+            Manage Sivakasi cracker catalog, brands, rates, discounts, bundles &amp; minimum stock.
+          </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Quick Add Stock (+) Button */}
           <button
             type="button"
-            onClick={handleRefresh}
-            disabled={isReloading}
-            style={{
-              background: '#F1F5F9',
-              color: '#334155',
-              border: '1px solid #CBD5E1',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              fontWeight: '700',
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
+            onClick={() => openStockModal('add')}
+            className="header-outline-btn"
+            style={{ borderColor: '#86EFAC', color: '#15803D', background: '#F0FDF4' }}
+            title="Add stock to catalog"
           >
-            <RefreshCw size={14} className={isReloading ? 'spin' : ''} />
-            <span>{isReloading ? 'Syncing...' : 'Refresh from TiDB'}</span>
+            <PackagePlus size={15} color="#15803D" />
+            <span>+ Add Stock</span>
           </button>
 
+          {/* Quick Less Stock (-) Button */}
           <button
-            onClick={() => setIsModalOpen(true)}
-            style={{
-              background: '#4B4DFF',
-              color: '#FFF',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '10px',
-              fontWeight: '700',
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 14px rgba(75, 77, 255, 0.28)'
-            }}
+            type="button"
+            onClick={() => openStockModal('less')}
+            className="header-outline-btn"
+            style={{ borderColor: '#FECACA', color: '#DC2626', background: '#FEF2F2' }}
+            title="Deduct stock / Damage / Sample"
           >
-            <PlusCircle size={17} /> Add New Cracker Item
+            <PackageMinus size={15} color="#DC2626" />
+            <span>- Less Stock</span>
+          </button>
+
+          {/* Manage Categories Button */}
+          <button
+            type="button"
+            onClick={() => openStockModal('add')}
+            className="header-outline-btn"
+          >
+            <Tag size={15} color="#475569" />
+            <span>Manage Categories</span>
+          </button>
+
+          {/* + Add New Cracker Button */}
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="header-orange-btn"
+          >
+            <Plus size={16} />
+            <span>+ Add New Cracker</span>
           </button>
         </div>
       </div>
 
-      {/* Filters Bar */}
+      {/* Filter & Category Pills Box Matching Reference Screenshot */}
       <div style={{
-        display: 'flex',
-        gap: '16px',
-        alignItems: 'center',
         background: '#FFFFFF',
-        padding: '16px 24px',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
-        flexWrap: 'wrap'
+        padding: '18px 20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '14px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
       }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-          <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '12px' }} />
-          <input
-            type="text"
-            placeholder="Search by product name, item code, category..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+        {/* Row 1: Search & Dropdowns */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(280px, 2fr) minmax(180px, 1fr) minmax(180px, 1fr)',
+          gap: '14px',
+          alignItems: 'center'
+        }}>
+          {/* Search Input */}
+          <div style={{ position: 'relative' }}>
+            <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: '14px', top: '12px' }} />
+            <input
+              type="text"
+              placeholder="Search by Name, Code (SC001), Brand..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 14px 10px 38px',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                background: '#F8FAFC',
+                fontSize: '13px',
+                color: '#0F172A',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          {/* Category Dropdown */}
+          <select
+            value={selectedCategory}
+            onChange={e => setSelectedCategory(e.target.value)}
             style={{
-              width: '100%',
-              padding: '9px 12px 9px 36px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              fontSize: '13px'
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid #E2E8F0',
+              background: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: '600',
+              color: '#334155',
+              outline: 'none'
             }}
-          />
+          >
+            <option value="All">All Categories ({initialCategories.length})</option>
+            {initialCategories.map((c, i) => (
+              <option key={i} value={c}>{c}</option>
+            ))}
+          </select>
+
+          {/* Stock Status Dropdown */}
+          <select
+            value={stockFilter}
+            onChange={e => setStockFilter(e.target.value)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid #E2E8F0',
+              background: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: '600',
+              color: '#334155',
+              outline: 'none'
+            }}
+          >
+            <option value="All">All Stock Status</option>
+            <option value="in_stock">In Stock (&gt;0)</option>
+            <option value="low_stock">Low Stock (&le;20)</option>
+            <option value="out_of_stock">Out of Stock (0)</option>
+          </select>
         </div>
 
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          style={{
-            padding: '9px 14px',
-            borderRadius: '8px',
-            border: '1px solid #CBD5E1',
-            fontSize: '13px',
-            fontWeight: '600',
-            background: '#FFF'
-          }}
-        >
-          <option value="All">All Categories ({products.length})</option>
-          {initialCategories.map((c, i) => (
-            <option key={i} value={c}>{c}</option>
-          ))}
-        </select>
+        {/* Row 2: Category Horizontal Pills Matching Reference Screenshot */}
+        <div className="category-pills-scroll">
+          {categoryPills.map(cat => {
+            const isAct = (cat.id === 'All' && selectedCategory === 'All') || selectedCategory === cat.label;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id === 'All' ? 'All' : cat.label)}
+                className={`cat-pill-btn ${isAct ? 'active' : ''}`}
+              >
+                {cat.id === 'All' ? `All Items (${products.length})` : cat.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Product Table */}
+      {/* Product Table Matching Reference Screenshot */}
       <div style={{
         background: '#FFFFFF',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
         overflow: 'hidden',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
+        boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
-              <th style={{ padding: '14px 16px', width: '70px', textAlign: 'center' }}>Code</th>
-              <th style={{ padding: '14px 16px' }}>Product Name</th>
-              <th style={{ padding: '14px 16px', width: '200px' }}>Category</th>
-              <th style={{ padding: '14px 16px', width: '140px' }}>Packing / Content</th>
-              <th style={{ padding: '14px 16px', width: '120px', textAlign: 'right' }}>Standard Rate (₹)</th>
-              <th style={{ padding: '14px 16px', width: '120px', textAlign: 'center' }}>Stock Qty</th>
-              <th style={{ padding: '14px 16px', width: '100px', textAlign: 'center' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredProducts.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
-                  No products found matching "{searchTerm}".
-                </td>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', minWidth: '920px' }}>
+            <thead>
+              <tr style={{ background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '11px', fontWeight: '800', letterSpacing: '0.6px' }}>
+                <th style={{ padding: '14px 18px', width: '80px' }}>CODE</th>
+                <th style={{ padding: '14px 18px' }}>CRACKER NAME</th>
+                <th style={{ padding: '14px 18px', width: '150px' }}>CATEGORY</th>
+                <th style={{ padding: '14px 18px', width: '160px' }}>BRAND / PACKING</th>
+                <th style={{ padding: '14px 18px', width: '100px', textAlign: 'right' }}>MRP (₹)</th>
+                <th style={{ padding: '14px 18px', width: '120px', textAlign: 'right' }}>SELL PRICE (₹)</th>
+                <th style={{ padding: '14px 18px', width: '80px', textAlign: 'center' }}>DISC %</th>
+                <th style={{ padding: '14px 18px', width: '160px', textAlign: 'center' }}>CURRENT STOCK</th>
+                <th style={{ padding: '14px 18px', width: '110px', textAlign: 'center' }}>STATUS</th>
+                <th style={{ padding: '14px 18px', width: '90px', textAlign: 'center' }}>ACTIONS</th>
               </tr>
-            ) : (
-              filteredProducts.map((p) => {
-                const stock = Number(p.stock) || 0;
-                return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#4B4DFF' }}>
-                      {p.code}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1E293B' }}>
-                      {p.name}
-                    </td>
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>
-                      <span style={{ background: '#F1F5F9', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>
-                        {p.category}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>
-                      {p.content}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                      ₹{formatNumber(p.rate)}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        background: stock > 20 ? '#DCFCE7' : (stock > 0 ? '#FEF3C7' : '#FEE2E2'),
-                        color: stock > 20 ? '#15803D' : (stock > 0 ? '#B45309' : '#DC2626')
-                      }}>
-                        {stock === 0 ? 'Out of Stock' : `${stock} Units`}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                        <button
-                          type="button"
-                          title="Edit product in TiDB Cloud"
-                          onClick={() => setEditProduct({ ...p })}
-                          style={{
-                            background: '#EEF2FF',
-                            border: '1px solid #C7D2FE',
-                            color: '#4B4DFF',
-                            cursor: 'pointer',
-                            padding: '5px 7px',
-                            borderRadius: '6px',
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}
-                        >
-                          <Edit size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Delete from TiDB Cloud"
-                          onClick={() => handleDeleteProduct(p.id, p.name)}
-                          style={{
-                            background: '#FEE2E2',
-                            border: '1px solid #FECACA',
-                            color: '#EF4444',
-                            cursor: 'pointer',
-                            padding: '5px 7px',
-                            borderRadius: '6px',
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ padding: '50px 20px', textAlign: 'center', color: '#94A3B8' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <Package size={36} color="#CBD5E1" />
+                      <span style={{ fontWeight: '600', fontSize: '14px' }}>No crackers found matching "{searchTerm}".</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((p) => {
+                  const stock = Number(p.stock) || 0;
+                  const isOut = stock <= 0;
+                  const sellPrice = Number(p.rate) || 0;
+                  const mrp = p.mrp ? Number(p.mrp) : Math.round(sellPrice * 2.5);
+                  const disc = mrp > 0 ? Math.round(((mrp - sellPrice) / mrp) * 100) : 60;
+                  const codeStr = String(p.code || '').trim();
+                  const codeFormatted = codeStr.toUpperCase().startsWith('SKC')
+                    ? codeStr
+                    : `SKC-${codeStr.padStart(2, '0')}`;
+
+                  return (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s ease' }}>
+                      {/* CODE (Orange Badge from Reference Screenshot) */}
+                      <td style={{ padding: '14px 18px' }}>
+                        <span style={{
+                          background: '#FFF7ED',
+                          color: '#EA580C',
+                          border: '1px solid #FED7AA',
+                          borderRadius: '8px',
+                          padding: '4px 8px',
+                          fontWeight: '800',
+                          fontSize: '11.5px',
+                          display: 'inline-block',
+                          letterSpacing: '0.3px'
+                        }}>
+                          {codeFormatted}
+                        </span>
+                      </td>
+
+                      {/* CRACKER NAME */}
+                      <td style={{ padding: '14px 18px' }}>
+                        <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '13.5px' }}>
+                          {p.name}
+                        </div>
+                      </td>
+
+                      {/* CATEGORY */}
+                      <td style={{ padding: '14px 18px' }}>
+                        <span style={{
+                          background: '#F1F5F9',
+                          color: '#475569',
+                          borderRadius: '999px',
+                          padding: '3px 10px',
+                          fontSize: '11px',
+                          fontWeight: '600'
+                        }}>
+                          {p.category}
+                        </span>
+                      </td>
+
+                      {/* BRAND / PACKING */}
+                      <td style={{ padding: '14px 18px' }}>
+                        <span style={{ color: '#334155', fontWeight: '600', fontSize: '12.5px' }}>
+                          {p.content || 'Sivakasi Spark'}
+                        </span>
+                      </td>
+
+                      {/* MRP (₹) */}
+                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                        <span style={{ color: '#94A3B8', textDecoration: 'line-through', fontWeight: '600' }}>
+                          ₹{formatNumber(mrp)}
+                        </span>
+                      </td>
+
+                      {/* SELL PRICE (₹) (Bold Bright Orange) */}
+                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                        <span style={{ color: '#FF6B35', fontWeight: '900', fontSize: '14px' }}>
+                          ₹{formatNumber(sellPrice)}
+                        </span>
+                      </td>
+
+                      {/* DISC % (Bold Green) */}
+                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                        <span style={{ color: '#10B981', fontWeight: '800', fontSize: '13px' }}>
+                          {disc}%
+                        </span>
+                      </td>
+
+                      {/* CURRENT STOCK WITH INTERACTIVE ADD & LESS */}
+                      <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {/* Less Stock (-) */}
+                            <button
+                              type="button"
+                              onClick={() => handleQuickAdjust(p, -1)}
+                              disabled={stock <= 0}
+                              title="Less 1 Box"
+                              style={{
+                                width: '22px',
+                                height: '22px',
+                                borderRadius: '5px',
+                                border: '1px solid #FECACA',
+                                background: stock <= 0 ? '#F1F5F9' : '#FEE2E2',
+                                color: stock <= 0 ? '#CBD5E1' : '#DC2626',
+                                cursor: stock <= 0 ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: '900'
+                              }}
+                            >
+                              <Minus size={12} />
+                            </button>
+
+                            {/* Stock Display */}
+                            <span style={{
+                              fontWeight: '800',
+                              fontSize: '13px',
+                              color: isOut ? '#DC2626' : '#15803D',
+                              minWidth: '60px'
+                            }}>
+                              {stock} Box
+                            </span>
+
+                            {/* Add Stock (+) */}
+                            <button
+                              type="button"
+                              onClick={() => handleQuickAdjust(p, 1)}
+                              title="Add 1 Box"
+                              style={{
+                                width: '22px',
+                                height: '22px',
+                                borderRadius: '5px',
+                                border: '1px solid #A7F3D0',
+                                background: '#DCFCE7',
+                                color: '#15803D',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: '900'
+                              }}
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                            Min: {p.minStock || (isOut ? 20 : 15)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* STATUS (Active / Out of Stock) */}
+                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                        <span style={{
+                          background: isOut ? '#FEF2F2' : '#ECFDF5',
+                          color: isOut ? '#DC2626' : '#15803D',
+                          border: `1px solid ${isOut ? '#FECACA' : '#A7F3D0'}`,
+                          borderRadius: '999px',
+                          padding: '3px 12px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          display: 'inline-block'
+                        }}>
+                          {isOut ? 'Out of Stock' : 'Active'}
+                        </span>
+                      </td>
+
+                      {/* ACTIONS */}
+                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            title="Edit product"
+                            onClick={() => setEditProduct({ ...p })}
+                            style={{
+                              background: '#F8FAFC',
+                              border: '1px solid #E2E8F0',
+                              color: '#64748B',
+                              cursor: 'pointer',
+                              padding: '5px',
+                              borderRadius: '7px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            title="Delete product"
+                            onClick={() => handleDeleteProduct(p.id, p.name)}
+                            style={{
+                              background: '#FEF2F2',
+                              border: '1px solid #FECACA',
+                              color: '#EF4444',
+                              cursor: 'pointer',
+                              padding: '5px',
+                              borderRadius: '7px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Edit Product Modal */}
+      {/* ============================================================== */}
+      {/* MODAL 1: STOCK IN / STOCK OUT (PRODUCT ADD & LESS) MODAL       */}
+      {/* ============================================================== */}
+      {stockModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '20px',
+            padding: '28px',
+            width: '520px',
+            maxWidth: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #E2E8F0',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A', margin: 0 }}>
+                  Stock Adjustment (சரக்கு வரவு / கழிவு)
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
+                  Update live cracker inventory count in TiDB Cloud
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStockModal(prev => ({ ...prev, isOpen: false }))}
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  color: '#64748B'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Toggle: Add Stock vs Less Stock */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '8px',
+              background: '#F1F5F9',
+              padding: '6px',
+              borderRadius: '12px',
+              marginBottom: '20px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setStockModal(prev => ({
+                  ...prev,
+                  mode: 'add',
+                  reason: 'New Purchase / Stock Arrival'
+                }))}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: stockModal.mode === 'add' ? '#10B981' : 'transparent',
+                  color: stockModal.mode === 'add' ? '#FFFFFF' : '#475569',
+                  fontWeight: '800',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                  boxShadow: stockModal.mode === 'add' ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none'
+                }}
+              >
+                <PackagePlus size={16} />
+                <span>+ Add Stock (வரவு)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStockModal(prev => ({
+                  ...prev,
+                  mode: 'less',
+                  reason: 'Damage / Defective'
+                }))}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: stockModal.mode === 'less' ? '#EF4444' : 'transparent',
+                  color: stockModal.mode === 'less' ? '#FFFFFF' : '#475569',
+                  fontWeight: '800',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                  boxShadow: stockModal.mode === 'less' ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none'
+                }}
+              >
+                <PackageMinus size={16} />
+                <span>- Less Stock (கழிவு)</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleStockSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Product Selection */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Select Cracker Product *
+                </label>
+                <select
+                  value={stockModal.productId}
+                  onChange={e => setStockModal(prev => ({ ...prev, productId: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    background: '#FFF'
+                  }}
+                  required
+                >
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>
+                      #{p.code} - {p.name} (Current: {p.stock || 0} units)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity to Add or Less */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  {stockModal.mode === 'add' ? 'Quantity to Add (+)' : 'Quantity to Deduct / Less (-)'} *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={stockModal.qty}
+                  onChange={e => setStockModal(prev => ({ ...prev, qty: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: stockModal.mode === 'add' ? '2px solid #10B981' : '2px solid #EF4444',
+                    fontSize: '18px',
+                    fontWeight: '800',
+                    color: '#0F172A',
+                    outline: 'none'
+                  }}
+                  required
+                />
+
+                {/* Preset Chips */}
+                <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                  {[5, 10, 25, 50, 100].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setStockModal(prev => ({ ...prev, qty: amt }))}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #E2E8F0',
+                        background: Number(stockModal.qty) === amt ? (stockModal.mode === 'add' ? '#DCFCE7' : '#FEE2E2') : '#F8FAFC',
+                        color: Number(stockModal.qty) === amt ? (stockModal.mode === 'add' ? '#15803D' : '#DC2626') : '#475569',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {stockModal.mode === 'add' ? `+${amt}` : `-${amt}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reason / Category */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Reason / Reference Note
+                </label>
+                <select
+                  value={stockModal.reason}
+                  onChange={e => setStockModal(prev => ({ ...prev, reason: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
+                    background: '#FFF'
+                  }}
+                >
+                  {stockModal.mode === 'add' ? (
+                    <>
+                      <option value="New Purchase / Stock Arrival">New Purchase / Factory Stock Arrival (சரக்கு வரவு)</option>
+                      <option value="Customer Return">Customer Return (வாடிக்கையாளர் திருப்பியது)</option>
+                      <option value="Opening Stock / Bonus">Opening Balance / Bonus Stock</option>
+                      <option value="Inventory Correction">Physical Audit Correction (கூடுதல் வரவு)</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Damage / Defective">Damaged / Broken / Defective (சேதாரம்)</option>
+                      <option value="Direct Cash Sale">Direct Cash Counter Sale</option>
+                      <option value="Sample / Tasting">Free Sample / Testing (பரிசோதனை)</option>
+                      <option value="Expired / Wet Crackers">Wet / Expired Crackers (ஈரம்/பயன்படாதவை)</option>
+                      <option value="Shortage Correction">Inventory Shortage Correction (குறைவு கழிவு)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Real-Time Calculation Preview Card */}
+              <div style={{
+                background: stockModal.mode === 'add' ? '#ECFDF5' : '#FEF2F2',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                border: `1px solid ${stockModal.mode === 'add' ? '#A7F3D0' : '#FECACA'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: stockModal.mode === 'add' ? '#047857' : '#B91C1C' }}>
+                    Current Stock: <b>{curModalStock} units</b>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
+                    Adjustment: <b style={{ color: stockModal.mode === 'add' ? '#059669' : '#DC2626' }}>
+                      {stockModal.mode === 'add' ? `+${numModalQty}` : `-${numModalQty}`} units
+                    </b>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>New Resulting Stock:</div>
+                  <div style={{
+                    fontSize: '22px',
+                    fontWeight: '900',
+                    color: stockModal.mode === 'add' ? '#059669' : '#DC2626'
+                  }}>
+                    {previewModalNewStock} Units
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setStockModal(prev => ({ ...prev, isOpen: false }))}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    background: '#F8FAFC',
+                    cursor: 'pointer',
+                    fontWeight: '700',
+                    color: '#64748B'
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 22px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: stockModal.mode === 'add'
+                      ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
+                      : 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                    color: '#FFF',
+                    cursor: 'pointer',
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    boxShadow: stockModal.mode === 'add'
+                      ? '0 4px 14px rgba(16, 185, 129, 0.4)'
+                      : '0 4px 14px rgba(239, 68, 68, 0.4)'
+                  }}
+                >
+                  {stockModal.mode === 'add'
+                    ? `Confirm Add +${numModalQty} Units`
+                    : `Confirm Less -${numModalQty} Units`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 2: EDIT CRACKER ITEM                                    */}
+      {/* ============================================================== */}
       {editProduct && (
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
+          background: 'rgba(15, 23, 42, 0.6)',
           backdropFilter: 'blur(4px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1100,
+          padding: '16px'
         }}>
           <div style={{
             background: '#FFFFFF',
-            borderRadius: '16px',
+            borderRadius: '18px',
             padding: '24px',
             width: '500px',
-            maxWidth: '92vw',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+            maxWidth: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+            border: '1px solid #E2E8F0'
           }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>
+            <h3 style={{ fontSize: '17px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>
               Edit Cracker Item (TiDB Cloud)
             </h3>
             <form onSubmit={handleUpdateProduct} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Code</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Code</label>
                   <input
                     type="text"
                     value={editProduct.code}
                     onChange={e => setEditProduct({ ...editProduct, code: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                     required
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Product Name *</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Product Name *</label>
                   <input
                     type="text"
                     value={editProduct.name}
                     onChange={e => setEditProduct({ ...editProduct, name: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Category</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Category</label>
                 <select
                   value={editProduct.category}
                   onChange={e => setEditProduct({ ...editProduct, category: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', background: '#FFF' }}
                 >
                   {initialCategories.map((c, i) => (
                     <option key={i} value={c}>{c}</option>
@@ -3212,32 +3975,32 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Content / Pack</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Content / Pack</label>
                   <input
                     type="text"
                     value={editProduct.content}
                     onChange={e => setEditProduct({ ...editProduct, content: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Rate (₹) *</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Rate (₹) *</label>
                   <input
                     type="number"
                     step="0.01"
                     value={editProduct.rate}
                     onChange={e => setEditProduct({ ...editProduct, rate: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                     required
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Stock</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Current Stock</label>
                   <input
                     type="number"
                     value={editProduct.stock}
                     onChange={e => setEditProduct({ ...editProduct, stock: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                     required
                   />
                 </div>
@@ -3247,15 +4010,15 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
                 <button
                   type="button"
                   onClick={() => setEditProduct(null)}
-                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', fontWeight: '600' }}
+                  style={{ padding: '9px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', fontWeight: '700', color: '#64748B' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
+                  style={{ padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
                 >
-                  Update Product in TiDB
+                  Save Changes to TiDB
                 </button>
               </div>
             </form>
@@ -3263,59 +4026,64 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
         </div>
       )}
 
-      {/* Add Modal */}
+      {/* ============================================================== */}
+      {/* MODAL 3: ADD NEW PRODUCT                                      */}
+      {/* ============================================================== */}
       {isModalOpen && (
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.4)',
+          background: 'rgba(15, 23, 42, 0.6)',
           backdropFilter: 'blur(4px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1100,
+          padding: '16px'
         }}>
           <div style={{
             background: '#FFFFFF',
-            borderRadius: '16px',
+            borderRadius: '18px',
             padding: '24px',
-            width: '480px',
-            maxWidth: '92vw',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.15)'
+            width: '490px',
+            maxWidth: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.18)',
+            border: '1px solid #E2E8F0'
           }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>
+            <h3 style={{ fontSize: '17px', fontWeight: '800', marginBottom: '16px', color: '#0F172A' }}>
               Add New Cracker to Master
             </h3>
             <form onSubmit={handleCreateProduct} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Code</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Code</label>
                   <input
                     type="text"
                     placeholder="e.g. 44"
                     value={newCode}
                     onChange={e => setNewCode(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Product Name *</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Product Name *</label>
                   <input
                     type="text"
                     placeholder="e.g. 7cm Electric Sparklers"
                     value={newName}
                     onChange={e => setNewName(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+                    required
                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Category</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Category</label>
                 <select
                   value={newCat}
                   onChange={e => setNewCat(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', background: '#FFF' }}
                 >
                   {initialCategories.map((c, i) => (
                     <option key={i} value={c}>{c}</option>
@@ -3325,31 +4093,32 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Content / Pack</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Content / Pack</label>
                   <input
                     type="text"
                     value={newContent}
                     onChange={e => setNewContent(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Rate (₹) *</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Rate (₹) *</label>
                   <input
                     type="number"
                     placeholder="750"
                     value={newRate}
                     onChange={e => setNewRate(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+                    required
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>Stock</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '4px' }}>Opening Stock</label>
                   <input
                     type="number"
                     value={newStock}
                     onChange={e => setNewStock(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
                   />
                 </div>
               </div>
@@ -3358,13 +4127,13 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', fontWeight: '600' }}
+                  style={{ padding: '9px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', fontWeight: '700', color: '#64748B' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
+                  style={{ padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#4B4DFF', color: '#FFF', cursor: 'pointer', fontWeight: '700' }}
                 >
                   Save Product to TiDB
                 </button>

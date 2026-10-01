@@ -8,7 +8,15 @@ const router = express.Router();
 // 1. Health check & status
 router.get('/health', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT 1 as connected, DATABASE() as db, NOW() as time');
+    let rows;
+    try {
+      [rows] = await pool.query('SELECT 1 as connected, DATABASE() as db, NOW() as time');
+    } catch (firstErr) {
+      console.warn('[TiDB Health Check] Initial ping failed, retrying with fresh connection...', firstErr.message);
+      await new Promise(r => setTimeout(r, 400));
+      [rows] = await pool.query('SELECT 1 as connected, DATABASE() as db, NOW() as time');
+    }
+
     res.json({
       ok: true,
       database: rows[0].db,

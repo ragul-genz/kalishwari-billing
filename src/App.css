@@ -224,6 +224,375 @@
 .net-amount-value { font-size: 28px; font-weight: 800; margin-top: 4px; }
 
 /* ============================================================
+   SIDEBAR LAYOUT (SRI KALISWARI / GUGAN CRACKERS REFERENCE UI)
+   ============================================================ */
+.sidebar-layout-root {
+  display: flex;
+  min-height: 100vh;
+  background: #F8FAFC;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #0F172A;
+}
+
+.sidebar-aside {
+  width: 250px;
+  min-width: 250px;
+  background: #FFFFFF;
+  border-right: 1px solid #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 100;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-box {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.sidebar-logo-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid #FED7AA;
+  background: #FFF7ED;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.15);
+}
+
+.sidebar-brand-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-brand-sub {
+  font-size: 11px;
+  color: #64748B;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.sidebar-section-title {
+  padding: 16px 20px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #94A3B8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.sidebar-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 12px;
+  flex: 1;
+}
+
+.sidebar-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  position: relative;
+  width: 100%;
+}
+
+.sidebar-nav-btn:hover {
+  background: #F8FAFC;
+  color: #0F172A;
+}
+
+.sidebar-nav-btn.active {
+  background: #FFF7ED;
+  color: #FF6B35;
+  font-weight: 800;
+}
+
+.sidebar-nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3.5px;
+  border-radius: 0 4px 4px 0;
+  background: #FF6B35;
+}
+
+.sidebar-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.sidebar-badge-orange {
+  background: #FFEDD5;
+  color: #C2410C;
+}
+
+.sidebar-badge-red {
+  background: #FEE2E2;
+  color: #DC2626;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.sidebar-bottom-alert {
+  margin: 12px 14px;
+  padding: 10px 14px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #DC2626;
+  cursor: pointer;
+}
+
+.sidebar-profile {
+  padding: 14px 18px;
+  border-top: 1px solid #F1F5F9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFFFFF;
+}
+
+.sidebar-avatar-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.sidebar-profile-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.2;
+}
+
+.sidebar-profile-role {
+  font-size: 11px;
+  color: #10B981;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+/* Main Area Container */
+.sidebar-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #F8FAFC;
+}
+
+/* Top App Header */
+.top-header-bar {
+  height: 64px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.top-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.top-header-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.2;
+}
+
+.top-header-sub {
+  font-size: 12px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.top-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-orange-btn {
+  background: #FF6B35;
+  color: #FFFFFF;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.25);
+  transition: all 0.15s ease;
+}
+
+.header-orange-btn:hover {
+  background: #EA580C;
+}
+
+.header-outline-btn {
+  background: #FFFFFF;
+  color: #334155;
+  border: 1px solid #CBD5E1;
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.header-outline-btn:hover {
+  background: #F8FAFC;
+}
+
+.header-clock-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.header-admin-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFF7ED;
+  border: 1px solid #FFEDD5;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #EA580C;
+}
+
+.header-staff-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748B;
+}
+
+/* Category Pills Bar */
+.category-pills-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 0;
+}
+.category-pills-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.cat-pill-btn {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.cat-pill-btn:hover {
+  border-color: #CBD5E1;
+  color: #0F172A;
+}
+
+.cat-pill-btn.active {
+  background: #FF6B35;
+  border-color: #FF6B35;
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.25);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .sidebar-aside {
+    display: none;
+  }
+}
+
+/* ============================================================
    QUICK BILLING STYLES (Matching Reference UI)
    ============================================================ */
 

@@ -13,7 +13,7 @@ export async function getApiBase() {
 
   for (const base of candidates) {
     try {
-      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(2500) });
+      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(6000) });
       if (res.ok) {
         const data = await res.json();
         if (data && data.ok) {
@@ -36,7 +36,7 @@ async function apiFetch(endpoint, options = {}) {
     if (res.ok) return res;
     throw new Error(`API returned HTTP ${res.status}`);
   } catch (err) {
-    const alternates = ['http://localhost:5000/api', 'http://localhost:3000/api', '/api'].filter(b => b !== base);
+    const alternates = ['/api', 'http://localhost:5000/api', 'http://localhost:3000/api'].filter(b => b !== base);
     for (const alt of alternates) {
       try {
         const altRes = await fetch(`${alt}${endpoint}`, options);
@@ -51,29 +51,38 @@ async function apiFetch(endpoint, options = {}) {
 }
 
 export async function checkDbStatus() {
-  try {
-    const base = await getApiBase();
-    const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.ok) return data;
-    }
-    if (base !== 'http://localhost:5000/api') {
-      try {
-        const alt5000 = await fetch('http://localhost:5000/api/health', { signal: AbortSignal.timeout(3000) });
-        if (alt5000.ok) {
-          const d = await alt5000.json();
-          if (d && d.ok) {
-            currentApiBase = 'http://localhost:5000/api';
-            return d;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const base = await getApiBase();
+      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.ok) return data;
+      }
+
+      // Check alternate ports if base failed
+      const alternates = ['/api', 'http://localhost:5000/api', 'http://localhost:3000/api'].filter(b => b !== base);
+      for (const alt of alternates) {
+        try {
+          const altRes = await fetch(`${alt}/health`, { signal: AbortSignal.timeout(5000) });
+          if (altRes.ok) {
+            const d = await altRes.json();
+            if (d && d.ok) {
+              currentApiBase = alt;
+              return d;
+            }
           }
-        }
-      } catch (e) {}
+        } catch (e) {}
+      }
+    } catch (err) {
+      if (attempt === 1) {
+        await new Promise(r => setTimeout(r, 600));
+        continue;
+      }
+      return { ok: false, error: err.message };
     }
-    return { ok: false, error: 'Database unreachable' };
-  } catch (err) {
-    return { ok: false, error: err.message };
   }
+  return { ok: false, error: 'Database unreachable' };
 }
 
 export async function fetchYears() {

@@ -2,8 +2,14 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import express from 'express';
 import cors from 'cors';
+import dns from 'dns';
 import apiRouter from './server/api.js';
 import { initDatabase } from './server/db.js';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch (e) {}
 
 function tidbApiPlugin() {
   return {

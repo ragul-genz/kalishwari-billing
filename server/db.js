@@ -2,6 +2,13 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dns from 'dns';
+
+// Force IPv4 and use reliable DNS servers (Google / Cloudflare) to prevent mobile hotspot IPv6 NAT64 disconnects
+try {
+  dns.setDefaultResultOrder('ipv4first');
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch (e) {}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,12 +27,64 @@ const dbConfig = {
   },
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
+  maxIdle: 10,
+  idleTimeout: 60000,
+  connectTimeout: 20000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000
 };
 
 export const pool = mysql.createPool(dbConfig);
+
+// Pool connection error handling
+pool.on('connection', (connection) => {
+  connection.on('error', (err) => {
+    if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
+      console.warn('[TiDB] Socket reset by cloud gateway, connection will be recycled.');
+    } else {
+      console.warn('[TiDB] Pool connection error:', err.message);
+    }
+  });
+});
+
+// Periodic keep-alive heartbeat (every 20s) to prevent TiDB Serverless & cloud NAT gateways from sleeping/closing idle connections
+let heartbeatTimer = null;
+export function startDbHeartbeat() {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(async () => {
+    try {
+      await pool.query('SELECT 1');
+    } catch (err) {
+      console.warn('[TiDB Heartbeat] Keepalive ping failed, pool will reconnect on next query:', err.message);
+    }
+  }, 20000);
+  if (heartbeatTimer.unref) heartbeatTimer.unref();
+}
+
+// Resilient query wrapper with automatic reconnect retry
+export async function dbQuery(sql, params = [], retries = 2) {
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    try {
+      return await pool.query(sql, params);
+    } catch (err) {
+      const isRetryable =
+        err.code === 'ECONNRESET' ||
+        err.code === 'PROTOCOL_CONNECTION_LOST' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'EPIPE' ||
+        err.code === 'ENOTFOUND';
+      if (isRetryable && attempt <= retries) {
+        console.warn(`[TiDB] Reconnecting query attempt ${attempt} due to ${err.code}...`);
+        await new Promise(r => setTimeout(r, 400));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// Start keepalive heartbeat immediately
+startDbHeartbeat();
 
 // Initialize schema
 export async function initDatabase() {
