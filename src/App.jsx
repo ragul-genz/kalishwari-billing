@@ -55,6 +55,8 @@ import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } 
 import { formatCurrency, formatNumber, generatePdfDocument } from './utils/pdfGenerator';
 import { PrintableInvoice } from './components/PrintableInvoice';
 import { cleanPhoneNumber, openWhatsAppChat, shareInvoicePdf, copyInvoiceImageToClipboard } from './utils/whatsapp';
+import { PriceListView } from './components/PriceListView';
+import { StockAlertsView } from './components/StockAlertsView';
 
 import {
   checkDbStatus,
@@ -953,8 +955,8 @@ export default function App() {
                 type="button"
                 className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
                 onClick={() => {
-                  if (tab.id === 'stockinward' || tab.id === 'stockalerts' || tab.id === 'pricelist') {
-                    setActiveTab('products');
+                  if (tab.id === 'stockinward') {
+                    setActiveTab('stockalerts');
                   } else if (tab.id === 'dashboard' || tab.id === 'profit') {
                     setActiveTab('reports');
                   } else {
@@ -978,8 +980,8 @@ export default function App() {
         {lowStockCount > 0 && (
           <div
             className="sidebar-bottom-alert"
-            onClick={() => setActiveTab('products')}
-            title="Click to view low stock items"
+            onClick={() => setActiveTab('stockalerts')}
+            title="Click to view and alter low stock items"
           >
             <AlertTriangle size={15} color="#DC2626" />
             <span>⚠️ {lowStockCount} Low Stock Items</span>
@@ -1008,7 +1010,17 @@ export default function App() {
         <header className="top-header-bar">
           <div className="top-header-left">
             <div className="top-header-title">
-              {activeTab === 'products' ? 'Products Inventory' : (activeTab === 'estimate' ? 'Quick Billing Engine' : (activeTab === 'customers' ? 'Customers Directory' : (activeTab === 'reports' ? 'Sales History & Invoices' : 'Shop Settings')))}
+              {activeTab === 'products' ? 'Products Inventory' : (
+                activeTab === 'pricelist' ? 'Price List Master' : (
+                  activeTab === 'stockalerts' || activeTab === 'stockinward' ? 'Stock & Inventory Alerts' : (
+                    activeTab === 'estimate' ? 'Quick Billing Engine' : (
+                      activeTab === 'customers' ? 'Customers Directory' : (
+                        activeTab === 'reports' ? 'Sales History & Invoices' : 'Shop Settings'
+                      )
+                    )
+                  )
+                )
+              )}
             </div>
             <div className="top-header-sub">
               Sri Kaliswari Crackers • Sivakasi
@@ -1063,8 +1075,8 @@ export default function App() {
             {/* Price List Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('products')}
-              className="header-outline-btn"
+              onClick={() => setActiveTab('pricelist')}
+              className={`header-outline-btn ${activeTab === 'pricelist' ? 'active' : ''}`}
             >
               <FileText size={15} />
               <span>Price List</span>
@@ -1984,6 +1996,34 @@ export default function App() {
             showToast={showToast}
             activeYear={activeYear}
             isLoadingData={isLoadingData}
+            loadProducts={async () => {
+              const p = await fetchProducts(activeYear);
+              if (Array.isArray(p) && p.length > 0) setProducts(p);
+            }}
+          />
+        )}
+
+        {/* VIEW: PRICE LIST MASTER (விலைப் பட்டியல்) */}
+        {activeTab === 'pricelist' && (
+          <PriceListView
+            products={products}
+            setProducts={setProducts}
+            company={company}
+            showToast={showToast}
+            onSelectProductForBill={(p) => {
+              handleSelectProduct(p);
+              setActiveTab('estimate');
+            }}
+          />
+        )}
+
+        {/* VIEW: STOCK & ALERTS / ALTER (சரக்கு இருப்பு & திருத்தம்) */}
+        {(activeTab === 'stockalerts' || activeTab === 'stockinward') && (
+          <StockAlertsView
+            products={products}
+            setProducts={setProducts}
+            showToast={showToast}
+            activeYear={activeYear}
             loadProducts={async () => {
               const p = await fetchProducts(activeYear);
               if (Array.isArray(p) && p.length > 0) setProducts(p);
