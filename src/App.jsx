@@ -607,7 +607,14 @@ export default function App() {
         invoice: newInvoice,
         popupBlocked: waResult.popupBlocked
       });
-      showToast(`Bill #SKC ${billNo} Saved & Ready for WhatsApp (+${cleanMobile})!`);
+      showToast(`Bill #SKC ${billNo} Saved! WhatsApp Chat Opened.`);
+      setTimeout(() => {
+        copyInvoiceImageToClipboard('printable-invoice-container')
+          .then(() => {
+            showToast('✓ Invoice Image copied! In WhatsApp Web, simply press Ctrl + V to send.');
+          })
+          .catch(() => {});
+      }, 350);
     } else {
       showToast(`Bill #SKC ${billNo} Saved & Downloaded to Computer!`);
     }
