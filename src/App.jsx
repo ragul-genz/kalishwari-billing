@@ -61,7 +61,11 @@ import {
   deleteInvoice as apiDeleteInvoice,
   clearAllInvoices as apiClearAllInvoices,
   syncLocalStorageToDb,
-  fetchStats
+  fetchStats,
+  getWhatsAppBotStatus,
+  connectWhatsAppBot,
+  logoutWhatsAppBot,
+  sendInvoicePdfViaWhatsAppBot
 } from './utils/api';
 
 export default function App() {
@@ -98,6 +102,23 @@ export default function App() {
     const interval = setInterval(refreshDbStatus, 30000);
     return () => clearInterval(interval);
   }, [refreshDbStatus]);
+
+  // WhatsApp Bot State (for direct automated PDF sending)
+  const [waBotStatus, setWaBotStatus] = React.useState({ status: 'disconnected', connected: false });
+  const [isWaModalOpen, setIsWaModalOpen] = React.useState(false);
+
+  const fetchWaStatus = React.useCallback(async () => {
+    try {
+      const st = await getWhatsAppBotStatus();
+      setWaBotStatus(st);
+    } catch (e) {}
+  }, []);
+
+  React.useEffect(() => {
+    fetchWaStatus();
+    const interval = setInterval(fetchWaStatus, 4000);
+    return () => clearInterval(interval);
+  }, [fetchWaStatus]);
 
   // Load registered database years on mount
   React.useEffect(() => {
@@ -585,10 +606,14 @@ export default function App() {
     });
 
     // 1. AUTOMATIC COMPUTER PDF DOWNLOAD (Save bill automatically to PC)
+    let pdfBase64 = null;
+    let safePdfName = `Sri_Kaliswari_Bill_SKC_${billNo}.pdf`;
     try {
       const doc = generatePdfDocument(newInvoice, company);
       const safeCustomerName = (customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-      doc.save(`Sri_Kaliswari_Bill_SKC_${billNo}_${safeCustomerName}.pdf`);
+      safePdfName = `Sri_Kaliswari_Bill_SKC_${billNo}_${safeCustomerName}.pdf`;
+      doc.save(safePdfName);
+      pdfBase64 = doc.output('datauristring');
     } catch (err) {
       console.warn('PDF auto-download error:', err);
     }
@@ -596,6 +621,24 @@ export default function App() {
     // 2. AUTOMATIC WHATSAPP INVOICE DISPATCH TO CUSTOMER
     const cleanMobile = cleanPhoneNumber(customerMobile);
     if (cleanMobile && cleanMobile.length >= 10) {
+      // If WhatsApp Bot is connected, automatically send the actual PDF document directly to the customer!
+      if (waBotStatus.connected && pdfBase64) {
+        sendInvoicePdfViaWhatsAppBot({
+          phone: cleanMobile,
+          billNo: newInvoice.billNo,
+          customerName: newInvoice.customerName,
+          netAmount: newInvoice.netAmount,
+          pdfBase64: pdfBase64,
+          filename: safePdfName
+        })
+          .then(() => {
+            showToast(`✓ Official PDF Invoice #SKC ${billNo} auto-sent to customer WhatsApp (+${cleanMobile})!`);
+          })
+          .catch((err) => {
+            console.warn('WhatsApp Bot send failed:', err);
+          });
+      }
+
       const waResult = openWhatsAppChat(cleanMobile, '');
       setWhatsappModal({
         isOpen: true,
@@ -605,14 +648,13 @@ export default function App() {
         netAmount: newInvoice.netAmount,
         waUrl: waResult.waUrl,
         invoice: newInvoice,
+        pdfBase64: pdfBase64,
+        filename: safePdfName,
         popupBlocked: waResult.popupBlocked
       });
-      showToast(`Bill #SKC ${billNo} Saved! WhatsApp Chat Opened.`);
+      showToast(`Bill #SKC ${billNo} Saved & Processed for WhatsApp (+${cleanMobile})!`);
       setTimeout(() => {
         copyInvoiceImageToClipboard('printable-invoice-container')
-          .then(() => {
-            showToast('✓ Invoice Image copied! In WhatsApp Web, simply press Ctrl + V to send.');
-          })
           .catch(() => {});
       }, 350);
     } else {
@@ -927,6 +969,38 @@ export default function App() {
             }}></span>
             <Database size={13} />
             <span>{dbConnected ? 'TiDB: Live' : 'TiDB: Offline'}</span>
+          </div>
+
+          {/* WhatsApp Bot Status & QR Modal Trigger */}
+          <div
+            onClick={() => {
+              setIsWaModalOpen(true);
+              fetchWaStatus();
+            }}
+            title={waBotStatus.connected ? `WhatsApp Bot Live: +${waBotStatus.phone}\nClick to manage WhatsApp bot connection` : 'Click to scan QR code and link WhatsApp for automatic PDF bill sending'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: waBotStatus.connected ? '#DCFCE7' : '#FEF3C7',
+              border: `1px solid ${waBotStatus.connected ? '#86EFAC' : '#FCD34D'}`,
+              padding: '6px 12px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              fontWeight: '700',
+              color: waBotStatus.connected ? '#15803D' : '#B45309',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: waBotStatus.connected ? '#16A34A' : '#F59E0B',
+              boxShadow: waBotStatus.connected ? '0 0 6px #16A34A' : 'none'
+            }}></span>
+            <Send size={13} />
+            <span>{waBotStatus.connected ? `WA Bot: Live` : `Link WhatsApp (QR)`}</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F1F5F9', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', color: '#475569' }}>
@@ -2292,6 +2366,54 @@ export default function App() {
               </div>
             </div>
 
+            {/* WhatsApp Bot Auto-Dispatch Indicator */}
+            {waBotStatus.connected ? (
+              <div style={{
+                background: '#DCFCE7',
+                border: '1px solid #86EFAC',
+                borderRadius: '14px',
+                padding: '14px',
+                marginBottom: '16px',
+                textAlign: 'left'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#15803D', fontWeight: '800', fontSize: '13.5px' }}>
+                  <Check size={18} /> Official PDF Document Sent Automatically!
+                </div>
+                <div style={{ fontSize: '12px', color: '#166534', marginTop: '4px' }}>
+                  The real <b>PDF Invoice file</b> has been directly sent to <b>+{whatsappModal.phone}</b> via your connected WhatsApp!
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => {
+                  setWhatsappModal(null);
+                  setIsWaModalOpen(true);
+                  connectWhatsAppBot().then(fetchWaStatus);
+                }}
+                style={{
+                  background: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
+                  marginBottom: '16px',
+                  textAlign: 'left',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E', fontSize: '13px' }}>
+                    📱 Link WhatsApp Bot for Auto PDF Sending
+                  </span>
+                  <span style={{ fontSize: '11px', background: '#F59E0B', color: '#FFF', padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>
+                    Click to Scan QR
+                  </span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '4px' }}>
+                  Scan QR code once to automatically dispatch real PDF files directly to customer WhatsApp on every bill!
+                </div>
+              </div>
+            )}
+
             {/* Instruction Banner */}
             <div style={{
               background: '#EFF6FF',
@@ -2312,6 +2434,45 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* Button: Re-send PDF via WhatsApp Bot if connected */}
+              {waBotStatus.connected && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      showToast('Sending PDF to customer WhatsApp...');
+                      await sendInvoicePdfViaWhatsAppBot({
+                        phone: whatsappModal.phone,
+                        billNo: whatsappModal.billNo,
+                        customerName: whatsappModal.customerName,
+                        netAmount: whatsappModal.netAmount,
+                        pdfBase64: whatsappModal.pdfBase64,
+                        filename: whatsappModal.filename
+                      });
+                      showToast('✓ PDF Invoice sent successfully to WhatsApp!');
+                    } catch (e) {
+                      showToast('Error sending via bot: ' + e.message);
+                    }
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '13px 20px',
+                    borderRadius: '12px',
+                    fontWeight: '800',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
+                  }}
+                >
+                  <Send size={16} /> 🚀 Re-send PDF Document via Bot
+                </button>
+              )}
               {/* Button 1: Share Invoice PDF Document (Native Web Share) */}
               <button
                 type="button"
@@ -2452,6 +2613,203 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── WHATSAPP DEVICE LINKING MODAL (QR CODE BOT) ────────────────── */}
+      {isWaModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2600,
+          padding: '16px',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '24px',
+            padding: '30px',
+            width: '480px',
+            maxWidth: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            border: '1px solid #E2E8F0',
+            textAlign: 'center',
+            position: 'relative'
+          }}>
+            {/* Header Icon */}
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: waBotStatus.connected ? '#DCFCE7' : '#EFF6FF',
+              color: waBotStatus.connected ? '#16A34A' : '#2563EB',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto',
+              fontSize: '32px',
+              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.08)'
+            }}>
+              {waBotStatus.connected ? '🟢' : '📱'}
+            </div>
+
+            <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A', margin: '0 0 6px 0' }}>
+              {waBotStatus.connected ? 'WhatsApp Bot Connected!' : 'Link WhatsApp (Automated PDF)'}
+            </h3>
+            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 20px 0' }}>
+              {waBotStatus.connected
+                ? `Connected to WhatsApp (+${waBotStatus.phone}). All customer bills will automatically be sent as real PDF documents!`
+                : 'Scan this QR code from your mobile WhatsApp to automatically dispatch PDF invoices to customers.'}
+            </p>
+
+            {/* If Connected */}
+            {waBotStatus.connected ? (
+              <div style={{
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '16px',
+                padding: '20px',
+                marginBottom: '20px',
+                textAlign: 'left'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16A34A', fontWeight: '800', fontSize: '15px', marginBottom: '8px' }}>
+                  <Check size={18} />
+                  <span>Device Linked &amp; Active</span>
+                </div>
+                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                  Linked Number: <b>+{waBotStatus.phone}</b>
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '8px', lineHeight: '1.4' }}>
+                  Whenever you create a bill, the customer will directly receive the <b>Official A4 PDF Document</b> in their WhatsApp inbox automatically!
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm('Disconnect WhatsApp Bot from this computer?')) {
+                      await logoutWhatsAppBot();
+                      fetchWaStatus();
+                      showToast('WhatsApp Bot disconnected.');
+                    }
+                  }}
+                  style={{
+                    marginTop: '16px',
+                    background: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#DC2626',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Disconnect WhatsApp
+                </button>
+              </div>
+            ) : (
+              /* If Not Connected - Show QR Code or Connect Button */
+              <div>
+                {waBotStatus.qrCode ? (
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{
+                      display: 'inline-block',
+                      background: '#FFFFFF',
+                      padding: '14px',
+                      borderRadius: '16px',
+                      border: '2px solid #E2E8F0',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.08)'
+                    }}>
+                      <img
+                        src={waBotStatus.qrCode}
+                        alt="WhatsApp QR Code"
+                        style={{ width: '230px', height: '230px', display: 'block', borderRadius: '8px' }}
+                      />
+                    </div>
+
+                    <div style={{
+                      marginTop: '16px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      textAlign: 'left',
+                      fontSize: '12.5px',
+                      color: '#475569',
+                      lineHeight: '1.6'
+                    }}>
+                      <div style={{ fontWeight: '800', color: '#0F172A', marginBottom: '4px' }}>
+                        How to Link WhatsApp:
+                      </div>
+                      <div>1. Open <b>WhatsApp</b> on your mobile phone</div>
+                      <div>2. Tap <b>Settings</b> (or 3 dots) &gt; <b>Linked Devices</b></div>
+                      <div>3. Tap <b>Link a Device</b> and point camera at this QR code</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '16px',
+                    padding: '24px',
+                    marginBottom: '20px'
+                  }}>
+                    <div style={{ fontSize: '14px', color: '#475569', marginBottom: '16px' }}>
+                      Click below to generate the WhatsApp QR Code:
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        showToast('Generating WhatsApp QR Code...');
+                        await connectWhatsAppBot();
+                        fetchWaStatus();
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #25D366 0%, #16A34A 100%)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '12px 24px',
+                        borderRadius: '12px',
+                        fontWeight: '800',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <Send size={16} /> Generate WhatsApp QR Code
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsWaModalOpen(false)}
+              style={{
+                background: '#F1F5F9',
+                border: '1px solid #CBD5E1',
+                color: '#475569',
+                padding: '10px 20px',
+                borderRadius: '10px',
+                fontWeight: '700',
+                fontSize: '13px',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
 
     </div>
   );

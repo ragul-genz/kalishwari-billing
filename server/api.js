@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from './db.js';
 import { defaultCompany, defaultProducts, defaultCustomers } from '../src/data/defaultData.js';
+import { getWhatsAppStatus, initWhatsAppBot, logoutWhatsAppBot, sendInvoiceDocument } from './whatsappBot.js';
 
 const router = express.Router();
 
@@ -629,6 +630,63 @@ router.post('/sync/import', async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     conn.release();
+  }
+});
+
+// ── WHATSAPP SERVER BOT API ROUTES ──────────────────────────────
+router.get('/whatsapp/status', (req, res) => {
+  try {
+    const status = getWhatsAppStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/whatsapp/connect', async (req, res) => {
+  try {
+    const status = await initWhatsAppBot();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/whatsapp/logout', async (req, res) => {
+  try {
+    const status = await logoutWhatsAppBot();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/whatsapp/send-pdf', async (req, res) => {
+  try {
+    const { phone, billNo, customerName, netAmount, pdfBase64, filename } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Customer phone number is required' });
+    }
+    if (!pdfBase64) {
+      return res.status(400).json({ error: 'PDF Base64 data is required' });
+    }
+
+    const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
+    const pdfBuffer = Buffer.from(cleanBase64, 'base64');
+
+    const result = await sendInvoiceDocument(
+      phone,
+      billNo,
+      customerName,
+      netAmount,
+      pdfBuffer,
+      filename
+    );
+
+    res.json({ success: true, message: `PDF Invoice #SKC ${billNo} sent successfully to WhatsApp (+${result.to})!`, result });
+  } catch (err) {
+    console.error('Error sending WhatsApp invoice PDF:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

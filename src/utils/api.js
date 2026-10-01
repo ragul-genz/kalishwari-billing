@@ -300,3 +300,48 @@ export async function fetchStats(year) {
   }
 }
 
+// ── WHATSAPP SERVER BOT API CLIENT ──────────────────────────────
+export async function getWhatsAppBotStatus() {
+  try {
+    const res = await apiFetch('/whatsapp/status');
+    if (!res.ok) throw new Error('Failed to get WhatsApp status');
+    return await res.json();
+  } catch (err) {
+    return { status: 'disconnected', connected: false, error: err.message };
+  }
+}
+
+export async function connectWhatsAppBot() {
+  try {
+    const res = await apiFetch('/whatsapp/connect', { method: 'POST' });
+    return await res.json();
+  } catch (err) {
+    return { status: 'disconnected', connected: false, error: err.message };
+  }
+}
+
+export async function logoutWhatsAppBot() {
+  try {
+    const res = await apiFetch('/whatsapp/logout', { method: 'POST' });
+    return await res.json();
+  } catch (err) {
+    return { status: 'disconnected', connected: false, error: err.message };
+  }
+}
+
+export async function sendInvoicePdfViaWhatsAppBot(payload) {
+  try {
+    const res = await apiFetch('/whatsapp/send-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to send WhatsApp PDF');
+    return data;
+  } catch (err) {
+    console.error('Error sending WhatsApp invoice PDF:', err);
+    throw err;
+  }
+}
+
