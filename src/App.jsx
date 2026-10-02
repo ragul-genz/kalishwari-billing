@@ -48,7 +48,8 @@ import {
   History,
   Truck,
   AlertTriangle,
-  FileText
+  FileText,
+  QrCode
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { initialCategories, defaultProducts, defaultCustomers, defaultCompany } from './data/defaultData';
@@ -1973,11 +1974,17 @@ export default function App() {
                           customerMobileRef.current?.focus();
                           return;
                         }
+                        if (!waBotStatus.connected) {
+                          setIsWaModalOpen(true);
+                          connectWhatsAppBot().then(fetchWaStatus);
+                          showToast('Scan QR code once to enable Direct PDF sending to WhatsApp!');
+                          return;
+                        }
                         handleSaveAndPrint(false);
                       }}
-                      title="Save and dispatch invoice to customer WhatsApp"
+                      title="Save and dispatch invoice directly as PDF to customer WhatsApp"
                       style={{
-                        background: '#16A34A',
+                        background: waBotStatus.connected ? '#16A34A' : '#F59E0B',
                         color: '#FFFFFF',
                         border: 'none',
                         padding: '11px',
@@ -1989,10 +1996,10 @@ export default function App() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '6px',
-                        boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)'
+                        boxShadow: waBotStatus.connected ? '0 4px 12px rgba(22, 163, 74, 0.25)' : '0 4px 12px rgba(245, 158, 11, 0.25)'
                       }}
                     >
-                      <Share2 size={15} /> WhatsApp PDF
+                      <Share2 size={15} /> {waBotStatus.connected ? 'WhatsApp PDF' : 'Link WA for PDF'}
                     </button>
                   </div>
 
@@ -2621,13 +2628,13 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {/* Button: Re-send PDF via WhatsApp Bot if connected */}
-              {waBotStatus.connected && (
+              {/* PRIMARY ACTION: Direct PDF Document Sending */}
+              {waBotStatus.connected ? (
                 <button
                   type="button"
                   onClick={async () => {
                     try {
-                      showToast('Sending PDF to customer WhatsApp...');
+                      showToast('Sending direct PDF file to customer WhatsApp...');
                       await sendInvoicePdfViaWhatsAppBot({
                         phone: whatsappModal.phone,
                         billNo: whatsappModal.billNo,
@@ -2636,64 +2643,56 @@ export default function App() {
                         pdfBase64: whatsappModal.pdfBase64,
                         filename: whatsappModal.filename
                       });
-                      showToast('✓ PDF Invoice sent successfully to WhatsApp!');
+                      showToast('✓ Official PDF Invoice Document sent to customer WhatsApp!');
                     } catch (e) {
                       showToast('Error sending via bot: ' + e.message);
                     }
                   }}
                   style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
                     color: '#FFFFFF',
                     border: 'none',
-                    padding: '13px 20px',
+                    padding: '14px 20px',
                     borderRadius: '12px',
                     fontWeight: '800',
-                    fontSize: '14px',
+                    fontSize: '15px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
+                    boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)'
                   }}
                 >
-                  <Send size={16} /> 🚀 Re-send PDF Document via Bot
+                  <Send size={18} /> 🚀 Send Direct PDF Document to Customer
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWhatsappModal(null);
+                    setIsWaModalOpen(true);
+                    connectWhatsAppBot().then(fetchWaStatus);
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '14px 20px',
+                    borderRadius: '12px',
+                    fontWeight: '800',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)'
+                  }}
+                >
+                  <QrCode size={18} /> 📱 Scan QR Code to Send Real PDF to WhatsApp
                 </button>
               )}
-              {/* Button 1: Share Invoice PDF Document (Native Web Share) */}
-              <button
-                type="button"
-                onClick={async () => {
-                  if (whatsappModal.invoice) {
-                    const res = await shareInvoicePdf(whatsappModal.invoice, company);
-                    if (res.success) {
-                      showToast('Invoice PDF shared successfully!');
-                    } else if (res.notSupported) {
-                      showToast('Opening WhatsApp Chat. Use Ctrl + V to send the invoice!');
-                      window.open(whatsappModal.waUrl, '_blank');
-                    } else {
-                      showToast(res.error || 'Could not trigger share');
-                    }
-                  }
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  padding: '13px 20px',
-                  borderRadius: '12px',
-                  fontWeight: '800',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)'
-                }}
-              >
-                <Share2 size={17} /> 📤 Share Invoice PDF Document
-              </button>
 
               {/* Button 2: Copy Invoice Image for Ctrl + V in WhatsApp */}
               <button
