@@ -14,6 +14,8 @@ let botStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'qrcode' | 'c
 let latestQrDataUrl = null;
 let connectedPhone = null;
 let lastError = null;
+let isInitializing = false;
+let reconnectTimer = null;
 
 export function getWhatsAppStatus() {
   return {
@@ -30,6 +32,11 @@ export async function initWhatsAppBot() {
     return getWhatsAppStatus();
   }
 
+  if (isInitializing) {
+    return getWhatsAppStatus();
+  }
+
+  isInitializing = true;
   botStatus = 'connecting';
   lastError = null;
 
@@ -39,6 +46,15 @@ export async function initWhatsAppBot() {
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+
+    // Clean up previous socket if existing
+    if (sock) {
+      try {
+        sock.ev.removeAllListeners();
+        sock.end();
+      } catch (e) {}
+      sock = null;
+    }
 
     sock = makeWASocket({
       auth: state,
@@ -63,6 +79,7 @@ export async function initWhatsAppBot() {
       }
 
       if (connection === 'close') {
+        isInitializing = false;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
@@ -75,13 +92,23 @@ export async function initWhatsAppBot() {
           try {
             fs.rmSync(SESSION_DIR, { recursive: true, force: true });
           } catch (e) {}
+        } else if (statusCode === DisconnectReason.connectionReplaced || statusCode === 440) {
+          botStatus = 'connected'; // Keep phone registered, do not spam reconnect
+          lastError = 'WhatsApp session is active in WhatsApp Web.';
+          console.log('WhatsApp connection active in browser session (440). Standing by.');
         } else {
           botStatus = 'connecting';
-          setTimeout(() => {
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(() => {
             initWhatsAppBot();
-          }, 4000);
+          }, 8000);
         }
       } else if (connection === 'open') {
+        isInitializing = false;
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         botStatus = 'connected';
         latestQrDataUrl = null;
         lastError = null;
@@ -97,6 +124,7 @@ export async function initWhatsAppBot() {
 
     return getWhatsAppStatus();
   } catch (err) {
+    isInitializing = false;
     botStatus = 'disconnected';
     lastError = err.message;
     console.error('Failed to initialize WhatsApp bot:', err);
