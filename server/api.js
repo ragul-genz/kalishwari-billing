@@ -1,7 +1,17 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { pool, dbQuery } from './db.js';
 import { defaultCompany, defaultProducts, defaultCustomers } from '../src/data/defaultData.js';
 import { getWhatsAppStatus, initWhatsAppBot, logoutWhatsAppBot, sendInvoiceDocument } from './whatsappBot.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const INVOICES_PDF_DIR = path.join(__dirname, '../uploads/invoices_pdf');
+if (!fs.existsSync(INVOICES_PDF_DIR)) {
+  fs.mkdirSync(INVOICES_PDF_DIR, { recursive: true });
+}
 
 const router = express.Router();
 
@@ -662,6 +672,38 @@ router.post('/whatsapp/logout', async (req, res) => {
   }
 });
 
+// ── INVOICE PDF STORAGE & PUBLIC VIEW/DOWNLOAD ──────────────────
+router.post('/invoices/:billNo/pdf', (req, res) => {
+  try {
+    const { billNo } = req.params;
+    const { pdfBase64, filename } = req.body;
+    if (!pdfBase64) return res.status(400).json({ error: 'pdfBase64 is required' });
+    const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const safeName = filename || `Sri_Kaliswari_Bill_SKC_${billNo}.pdf`;
+    const filePath = path.join(INVOICES_PDF_DIR, `bill_${billNo}.pdf`);
+    fs.writeFileSync(filePath, buffer);
+    res.json({ success: true, billNo, url: `/api/invoices/${billNo}/pdf`, filename: safeName });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/invoices/:billNo/pdf', (req, res) => {
+  try {
+    const { billNo } = req.params;
+    const filePath = path.join(INVOICES_PDF_DIR, `bill_${billNo}.pdf`);
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="Sri_Kaliswari_Bill_SKC_${billNo}.pdf"`);
+      return res.sendFile(filePath);
+    }
+    return res.status(404).send(`PDF for bill #${billNo} not found on server.`);
+  } catch (err) {
+    res.status(500).send('Error serving invoice PDF: ' + err.message);
+  }
+});
+
 router.post('/whatsapp/send-pdf', async (req, res) => {
   try {
     const { phone, billNo, customerName, netAmount, pdfBase64, filename } = req.body;
@@ -674,6 +716,14 @@ router.post('/whatsapp/send-pdf', async (req, res) => {
 
     const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
     const pdfBuffer = Buffer.from(cleanBase64, 'base64');
+
+    // Also persist PDF locally for instant viewing/downloading via URL
+    try {
+      const filePath = path.join(INVOICES_PDF_DIR, `bill_${billNo}.pdf`);
+      fs.writeFileSync(filePath, pdfBuffer);
+    } catch (saveErr) {
+      console.warn('Could not save PDF to uploads directory:', saveErr.message);
+    }
 
     const result = await sendInvoiceDocument(
       phone,

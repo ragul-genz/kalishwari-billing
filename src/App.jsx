@@ -82,7 +82,8 @@ import {
   getWhatsAppBotStatus,
   connectWhatsAppBot,
   logoutWhatsAppBot,
-  sendInvoicePdfViaWhatsAppBot
+  sendInvoicePdfViaWhatsAppBot,
+  uploadInvoicePdf
 } from './utils/api';
 
 export default function App() {
@@ -658,6 +659,9 @@ export default function App() {
       safePdfName = `Sri_Kaliswari_Bill_SKC_${billNo}_${safeCustomerName}.pdf`;
       doc.save(safePdfName);
       pdfBase64 = doc.output('datauristring');
+      if (pdfBase64) {
+        uploadInvoicePdf(newInvoice.billNo, pdfBase64, safePdfName);
+      }
     } catch (err) {
       console.warn('PDF auto-download error:', err);
     }
@@ -665,7 +669,10 @@ export default function App() {
     // 2. AUTOMATIC WHATSAPP INVOICE DISPATCH TO CUSTOMER
     const cleanMobile = cleanPhoneNumber(customerMobile);
     if (cleanMobile && cleanMobile.length >= 10) {
-      // If WhatsApp Bot is connected, automatically send the actual PDF document directly to the customer!
+      const invoiceMsg = createInvoiceWhatsAppMessage(newInvoice, company);
+      const waResult = openWhatsAppChat(cleanMobile, invoiceMsg, false);
+
+      // If WhatsApp Bot is connected, automatically send the actual PDF document file directly to the customer!
       if (waBotStatus.connected && pdfBase64) {
         sendInvoicePdfViaWhatsAppBot({
           phone: cleanMobile,
@@ -676,27 +683,27 @@ export default function App() {
           filename: safePdfName
         })
           .then(() => {
-            showToast(`✓ Official PDF Invoice #SKC ${billNo} auto-sent to customer WhatsApp (+${cleanMobile})!`);
+            showToast(`✓ Official PDF Invoice #SKC ${billNo} auto-sent directly to customer WhatsApp (+${cleanMobile})!`);
           })
           .catch((err) => {
             console.warn('WhatsApp Bot send failed:', err);
+            showToast('⚠️ WhatsApp Bot error: ' + (err.message || 'Could not send PDF'));
           });
+      } else {
+        // If not connected, prompt WhatsApp link modal so they can scan QR for direct PDF delivery
+        setWhatsappModal({
+          isOpen: true,
+          phone: cleanMobile,
+          customerName: newInvoice.customerName,
+          billNo: newInvoice.billNo,
+          netAmount: newInvoice.netAmount,
+          waUrl: waResult.waUrl,
+          invoice: newInvoice,
+          pdfBase64: pdfBase64,
+          filename: safePdfName,
+          popupBlocked: false
+        });
       }
-
-      const invoiceMsg = createInvoiceWhatsAppMessage(newInvoice, company);
-      const waResult = openWhatsAppChat(cleanMobile, invoiceMsg);
-      setWhatsappModal({
-        isOpen: true,
-        phone: cleanMobile,
-        customerName: newInvoice.customerName,
-        billNo: newInvoice.billNo,
-        netAmount: newInvoice.netAmount,
-        waUrl: waResult.waUrl,
-        invoice: newInvoice,
-        pdfBase64: pdfBase64,
-        filename: safePdfName,
-        popupBlocked: waResult.popupBlocked
-      });
       showToast(`Bill #SKC ${billNo} Saved & Processed for WhatsApp (+${cleanMobile})!`);
       setTimeout(() => {
         copyInvoiceImageToClipboard('printable-invoice-container')
@@ -2420,14 +2427,41 @@ export default function App() {
 
               {/* WhatsApp Action Button in Drawer */}
               <button
-                onClick={() => {
+                onClick={async () => {
                   const clean = cleanPhoneNumber(previewInvoice.customerMobile);
                   if (!clean || clean.length < 10) {
                     showToast('No valid customer phone number found in this bill');
                     return;
                   }
+                  let pdfBase64 = null;
+                  const safeCustomer = (previewInvoice.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+                  const filename = `Sri_Kaliswari_Bill_SKC_${previewInvoice.billNo}_${safeCustomer}.pdf`;
+                  try {
+                    const doc = generatePdfDocument(previewInvoice, company);
+                    pdfBase64 = doc.output('datauristring');
+                    if (pdfBase64) uploadInvoicePdf(previewInvoice.billNo, pdfBase64, filename);
+                  } catch (e) {}
+
+                  if (waBotStatus.connected && pdfBase64) {
+                    try {
+                      showToast('Sending direct PDF invoice to WhatsApp...');
+                      await sendInvoicePdfViaWhatsAppBot({
+                        phone: clean,
+                        billNo: previewInvoice.billNo,
+                        customerName: previewInvoice.customerName,
+                        netAmount: previewInvoice.netAmount,
+                        pdfBase64: pdfBase64,
+                        filename: filename
+                      });
+                      showToast(`✓ Official PDF Invoice #SKC ${previewInvoice.billNo} sent directly to WhatsApp!`);
+                      return;
+                    } catch (botErr) {
+                      console.warn('Bot send failed:', botErr);
+                    }
+                  }
+
                   const invoiceMsg = createInvoiceWhatsAppMessage(previewInvoice, company);
-                  const waRes = openWhatsAppChat(clean, invoiceMsg);
+                  const waRes = openWhatsAppChat(clean, invoiceMsg, false);
                   setWhatsappModal({
                     isOpen: true,
                     phone: clean,
@@ -2436,7 +2470,9 @@ export default function App() {
                     netAmount: previewInvoice.netAmount,
                     waUrl: waRes.waUrl,
                     invoice: previewInvoice,
-                    popupBlocked: waRes.popupBlocked
+                    pdfBase64: pdfBase64,
+                    filename: filename,
+                    popupBlocked: false
                   });
                 }}
                 style={{
@@ -4887,14 +4923,41 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                       <button
                         type="button"
                         title="Send WhatsApp Bill to Customer"
-                        onClick={() => {
+                        onClick={async () => {
                           const clean = cleanPhoneNumber(inv.customerMobile);
                           if (!clean || clean.length < 10) {
                             showToast('No customer phone number found in this bill');
                             return;
                           }
+                          let pdfBase64 = null;
+                          const safeCustomer = (inv.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+                          const filename = `Sri_Kaliswari_Bill_SKC_${inv.billNo}_${safeCustomer}.pdf`;
+                          try {
+                            const doc = generatePdfDocument(inv, company);
+                            pdfBase64 = doc.output('datauristring');
+                            if (pdfBase64) uploadInvoicePdf(inv.billNo, pdfBase64, filename);
+                          } catch (e) {}
+
+                          if (waBotStatus.connected && pdfBase64) {
+                            try {
+                              showToast('Sending direct PDF invoice to WhatsApp...');
+                              await sendInvoicePdfViaWhatsAppBot({
+                                phone: clean,
+                                billNo: inv.billNo,
+                                customerName: inv.customerName,
+                                netAmount: inv.netAmount,
+                                pdfBase64: pdfBase64,
+                                filename: filename
+                              });
+                              showToast(`✓ Official PDF Invoice #SKC ${inv.billNo} sent directly to WhatsApp!`);
+                              return;
+                            } catch (botErr) {
+                              console.warn('Bot send failed:', botErr);
+                            }
+                          }
+
                           const invoiceMsg = createInvoiceWhatsAppMessage(inv, company);
-                          const res = openWhatsAppChat(clean, invoiceMsg);
+                          const res = openWhatsAppChat(clean, invoiceMsg, false);
                           if (setWhatsappModal) {
                             setWhatsappModal({
                               isOpen: true,
@@ -4904,7 +4967,9 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                               netAmount: inv.netAmount,
                               waUrl: res.waUrl,
                               invoice: inv,
-                              popupBlocked: res.popupBlocked
+                              pdfBase64: pdfBase64,
+                              filename: filename,
+                              popupBlocked: false
                             });
                           }
                         }}

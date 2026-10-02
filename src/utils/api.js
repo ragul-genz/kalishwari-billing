@@ -354,3 +354,18 @@ export async function sendInvoicePdfViaWhatsAppBot(payload) {
   }
 }
 
+export async function uploadInvoicePdf(billNo, pdfBase64, filename) {
+  try {
+    const res = await apiFetch(`/invoices/${encodeURIComponent(billNo)}/pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfBase64, filename })
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('Could not cache PDF on server:', err);
+    return null;
+  }
+}
+
+
