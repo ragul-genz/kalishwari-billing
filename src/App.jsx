@@ -2664,7 +2664,41 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {/* PRIMARY ACTION: Direct PDF Document Sending */}
+              {/* PRIMARY ACTION 1: Native Direct PDF File Share (WhatsApp) */}
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await shareInvoicePdf(whatsappModal.invoice, company);
+                    if (res && res.success) {
+                      showToast('✓ PDF Invoice shared directly to WhatsApp!');
+                    } else if (res && res.notSupported) {
+                      showToast('Browser file share not supported here. Drag the downloaded PDF into WhatsApp chat below!');
+                    }
+                  } catch (e) {
+                    showToast('Sharing notice: ' + (e.message || 'Please drag downloaded PDF into chat'));
+                  }
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '14px 20px',
+                  borderRadius: '12px',
+                  fontWeight: '800',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)'
+                }}
+              >
+                <Share2 size={18} /> 📤 Share Official PDF File (WhatsApp)
+              </button>
+
+              {/* PRIMARY ACTION 2: WhatsApp Bot Auto-Dispatch */}
               {waBotStatus.connected ? (
                 <button
                   type="button"
@@ -2700,37 +2734,51 @@ export default function App() {
                     boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)'
                   }}
                 >
-                  <Send size={18} /> 🚀 Send Direct PDF Document to Customer
+                  <Send size={18} /> 🚀 Send Direct PDF via Connected WhatsApp
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWhatsappModal(null);
-                    setIsWaModalOpen(true);
-                    connectWhatsAppBot().then(fetchWaStatus);
-                  }}
-                  style={{
-                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '14px 20px',
-                    borderRadius: '12px',
-                    fontWeight: '800',
-                    fontSize: '15px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)'
-                  }}
-                >
-                  <QrCode size={18} /> 📱 Scan QR Code to Send Real PDF to WhatsApp
-                </button>
+                <div style={{
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '14px',
+                  padding: '14px',
+                  textAlign: 'center',
+                  margin: '4px 0'
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginBottom: '6px' }}>
+                    📱 தானாகவே PDF அனுப்ப 1 முறை Scan செய்யவும்:
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#475569', marginBottom: '10px', lineHeight: '1.4' }}>
+                    உங்கள் போனில் WhatsApp &gt; <b>Linked Devices</b> &gt; <b>Link a Device</b> கொடுத்து Scan செய்யவும். Scan செய்தவுடன் PDF தானாகவே customer-க்கு WhatsApp-ல் போய்விடும்!
+                  </div>
+                  {waBotStatus.qrCode ? (
+                    <img
+                      src={waBotStatus.qrCode}
+                      alt="WhatsApp Bot QR"
+                      style={{ width: '170px', height: '170px', borderRadius: '12px', border: '2px solid #CBD5E1', display: 'inline-block' }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => connectWhatsAppBot().then(fetchWaStatus)}
+                      style={{
+                        background: '#F59E0B',
+                        color: '#FFF',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Generate WhatsApp QR Code
+                    </button>
+                  )}
+                </div>
               )}
 
-              {/* Button 2: Copy Invoice Image for Ctrl + V in WhatsApp */}
+              {/* Button 3: Copy Invoice Image for Ctrl + V in WhatsApp */}
               <button
                 type="button"
                 onClick={async () => {
@@ -2761,9 +2809,9 @@ export default function App() {
               </button>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                {/* Button 3: Open Clean WhatsApp Chat */}
+                {/* Button 4: Open WhatsApp Web (Clean with NO pre-filled text) */}
                 <a
-                  href={whatsappModal.waUrl}
+                  href={`https://web.whatsapp.com/send?phone=${whatsappModal.phone}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -2781,10 +2829,10 @@ export default function App() {
                     gap: '6px'
                   }}
                 >
-                  <ExternalLink size={14} /> Open Chat
+                  <ExternalLink size={14} /> Open Clean Chat
                 </a>
 
-                {/* Button 4: Download PDF */}
+                {/* Button 5: Download PDF */}
                 <button
                   type="button"
                   onClick={() => {
