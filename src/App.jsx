@@ -4694,7 +4694,8 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
 
   const handleDownloadPdf = (inv) => {
     const doc = generatePdfDocument(inv, company);
-    doc.save(`Sri_Kaliswari_Bill_SKC_${inv.billNo}_${inv.customerName || 'Customer'}.pdf`);
+    const safeCustomer = (inv.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
+    doc.save(`Sri_Kaliswari_Bill_SKC_${inv.billNo}_${safeCustomer}.pdf`);
   };
 
   const handleDeleteInvoice = async (billNo) => {

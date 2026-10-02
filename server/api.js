@@ -5,12 +5,20 @@ import { fileURLToPath } from 'url';
 import { pool, dbQuery } from './db.js';
 import { defaultCompany, defaultProducts, defaultCustomers } from '../src/data/defaultData.js';
 import { getWhatsAppStatus, initWhatsAppBot, logoutWhatsAppBot, sendInvoiceDocument } from './whatsappBot.js';
+import { generateServerInvoicePdf } from './serverPdfGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const INVOICES_PDF_DIR = path.join(__dirname, '../uploads/invoices_pdf');
 if (!fs.existsSync(INVOICES_PDF_DIR)) {
   fs.mkdirSync(INVOICES_PDF_DIR, { recursive: true });
+}
+
+function extractPdfBuffer(pdfBase64) {
+  if (!pdfBase64) return null;
+  // Safely extract pure base64 whether data URI prefix is present or not
+  const clean = pdfBase64.includes(',') ? pdfBase64.substring(pdfBase64.indexOf(',') + 1) : pdfBase64;
+  return Buffer.from(clean.trim(), 'base64');
 }
 
 const router = express.Router();
@@ -678,8 +686,8 @@ router.post('/invoices/:billNo/pdf', (req, res) => {
     const { billNo } = req.params;
     const { pdfBase64, filename } = req.body;
     if (!pdfBase64) return res.status(400).json({ error: 'pdfBase64 is required' });
-    const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
+    const buffer = extractPdfBuffer(pdfBase64);
+    if (!buffer || buffer.length === 0) return res.status(400).json({ error: 'Invalid base64 PDF data' });
     const safeName = filename || `Sri_Kaliswari_Bill_SKC_${billNo}.pdf`;
     const filePath = path.join(INVOICES_PDF_DIR, `bill_${billNo}.pdf`);
     fs.writeFileSync(filePath, buffer);
@@ -689,18 +697,68 @@ router.post('/invoices/:billNo/pdf', (req, res) => {
   }
 });
 
-router.get('/invoices/:billNo/pdf', (req, res) => {
+router.get('/invoices/:billNo/pdf', async (req, res) => {
   try {
     const { billNo } = req.params;
     const filePath = path.join(INVOICES_PDF_DIR, `bill_${billNo}.pdf`);
+
+    // 1. If valid PDF exists on disk, serve it immediately
     if (fs.existsSync(filePath)) {
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="Sri_Kaliswari_Bill_SKC_${billNo}.pdf"`);
-      return res.sendFile(filePath);
+      try {
+        const existing = fs.readFileSync(filePath);
+        if (existing.length > 500 && existing.subarray(0, 4).toString() === '%PDF') {
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="Sri_Kaliswari_Bill_SKC_${billNo}.pdf"`);
+          return res.sendFile(filePath);
+        }
+      } catch (readErr) {
+        console.warn('Error reading existing PDF from disk:', readErr.message);
+      }
     }
-    return res.status(404).send(`PDF for bill #${billNo} not found on server.`);
+
+    // 2. Dynamic generation fallback from database (never return 404 or corrupted files!)
+    let billData = null;
+    try {
+      const [invRows] = await dbQuery('SELECT * FROM invoices WHERE bill_no = ? ORDER BY id DESC LIMIT 1', [billNo]);
+      if (invRows && invRows.length > 0) {
+        billData = formatInvoice(invRows[0]);
+      }
+    } catch (dbErr) {
+      console.warn('Could not query invoice from database:', dbErr.message);
+    }
+
+    let company = defaultCompany;
+    try {
+      const [compRows] = await dbQuery('SELECT * FROM company WHERE id = 1 LIMIT 1');
+      if (compRows && compRows.length > 0) {
+        company = compRows[0];
+      }
+    } catch (cErr) {}
+
+    if (!billData) {
+      billData = {
+        billNo: Number(billNo) || 1,
+        date: new Date().toISOString().split('T')[0],
+        customerName: 'Customer',
+        customerMobile: '-',
+        customerAddress: '-',
+        netAmount: 0,
+        grossTotal: 0,
+        items: []
+      };
+    }
+
+    const pdfBuffer = generateServerInvoicePdf(billData, company);
+    try {
+      fs.writeFileSync(filePath, pdfBuffer);
+    } catch (saveErr) {}
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Sri_Kaliswari_Bill_SKC_${billNo}.pdf"`);
+    res.send(pdfBuffer);
   } catch (err) {
-    res.status(500).send('Error serving invoice PDF: ' + err.message);
+    console.error('Error generating invoice PDF:', err);
+    res.status(500).send('Error generating invoice PDF: ' + err.message);
   }
 });
 
@@ -714,10 +772,12 @@ router.post('/whatsapp/send-pdf', async (req, res) => {
       return res.status(400).json({ error: 'PDF Base64 data is required' });
     }
 
-    const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
-    const pdfBuffer = Buffer.from(cleanBase64, 'base64');
+    const pdfBuffer = extractPdfBuffer(pdfBase64);
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      return res.status(400).json({ error: 'Invalid base64 PDF data' });
+    }
 
-    // Also persist PDF locally for instant viewing/downloading via URL
+    // Persist verified PDF to disk
     try {
       const filePath = path.join(INVOICES_PDF_DIR, `bill_${billNo}.pdf`);
       fs.writeFileSync(filePath, pdfBuffer);
