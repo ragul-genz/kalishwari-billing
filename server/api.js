@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from './db.js';
+import { pool, dbQuery } from './db.js';
 import { defaultCompany, defaultProducts, defaultCustomers } from '../src/data/defaultData.js';
 import { getWhatsAppStatus, initWhatsAppBot, logoutWhatsAppBot, sendInvoiceDocument } from './whatsappBot.js';
 
@@ -8,23 +8,16 @@ const router = express.Router();
 // 1. Health check & status
 router.get('/health', async (req, res) => {
   try {
-    let rows;
-    try {
-      [rows] = await pool.query('SELECT 1 as connected, DATABASE() as db, NOW() as time');
-    } catch (firstErr) {
-      console.warn('[TiDB Health Check] Initial ping failed, retrying with fresh connection...', firstErr.message);
-      await new Promise(r => setTimeout(r, 400));
-      [rows] = await pool.query('SELECT 1 as connected, DATABASE() as db, NOW() as time');
-    }
-
+    const [rows] = await dbQuery('SELECT 1 as connected, DATABASE() as db, NOW() as time', [], 3);
     res.json({
       ok: true,
-      database: rows[0].db,
-      connectedAt: rows[0].time,
+      database: rows[0]?.db || 'kalishwaribilling',
+      connectedAt: rows[0]?.time || new Date().toISOString(),
       host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
       message: 'TiDB Cloud MySQL connected successfully'
     });
   } catch (error) {
+    console.warn('[TiDB Health Check Failed]:', error.message);
     res.status(500).json({ ok: false, error: error.message });
   }
 });
@@ -32,10 +25,10 @@ router.get('/health', async (req, res) => {
 // 2. Years
 router.get('/years', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT year FROM years ORDER BY year ASC');
+    const [rows] = await dbQuery('SELECT year FROM years ORDER BY year ASC');
     if (rows.length === 0) {
       // Seed default year 2026
-      await pool.query('INSERT IGNORE INTO years (year) VALUES (?)', ['2026']);
+      await dbQuery('INSERT IGNORE INTO years (year) VALUES (?)', ['2026']);
       return res.json(['2026']);
     }
     res.json(rows.map(r => String(r.year)));
@@ -48,7 +41,7 @@ router.post('/years', async (req, res) => {
   const { year } = req.body;
   if (!year) return res.status(400).json({ error: 'Year is required' });
   try {
-    await pool.query('INSERT IGNORE INTO years (year) VALUES (?)', [String(year)]);
+    await dbQuery('INSERT IGNORE INTO years (year) VALUES (?)', [String(year)]);
     res.json({ success: true, year: String(year) });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -58,11 +51,11 @@ router.post('/years', async (req, res) => {
 // 3. Company settings
 router.get('/company', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM company WHERE id = 1');
+    const [rows] = await dbQuery('SELECT * FROM company WHERE id = 1');
     if (rows.length === 0) {
       // Seed with default company
       const c = defaultCompany;
-      await pool.query(
+      await dbQuery(
         `INSERT INTO company (id, name, tagline, address, mobile, email, gstin, state, state_code, bank_name, account_no, ifsc_code, branch, terms)
          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -97,7 +90,7 @@ router.get('/company', async (req, res) => {
 router.post('/company', async (req, res) => {
   const c = req.body;
   try {
-    await pool.query(
+    await dbQuery(
       `INSERT INTO company (id, name, tagline, address, mobile, email, gstin, state, state_code, bank_name, account_no, ifsc_code, branch, terms)
        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
@@ -122,17 +115,17 @@ router.post('/company', async (req, res) => {
 router.get('/products', async (req, res) => {
   const year = req.query.year || '2026';
   try {
-    const [rows] = await pool.query('SELECT * FROM products WHERE year = ? ORDER BY id ASC', [year]);
+    const [rows] = await dbQuery('SELECT * FROM products WHERE year = ? ORDER BY id ASC', [year]);
     if (rows.length === 0) {
       // Seed default products for this year
       for (const p of defaultProducts) {
-        await pool.query(
+        await dbQuery(
           `INSERT INTO products (year, code, name, category, content, rate, stock, tax_percent)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [year, String(p.code), p.name, p.category, p.content, p.rate, p.stock, p.taxPercent || 18]
         );
       }
-      const [seeded] = await pool.query('SELECT * FROM products WHERE year = ? ORDER BY id ASC', [year]);
+      const [seeded] = await dbQuery('SELECT * FROM products WHERE year = ? ORDER BY id ASC', [year]);
       return res.json(seeded.map(formatProduct));
     }
     res.json(rows.map(formatProduct));
@@ -159,7 +152,7 @@ router.post('/products', async (req, res) => {
   const { year = '2026', code, name, category, content = '', rate = 0, stock = 0, taxPercent = 18 } = req.body;
   if (!name || !category) return res.status(400).json({ error: 'Name and category are required' });
   try {
-    const [result] = await pool.query(
+    const [result] = await dbQuery(
       `INSERT INTO products (year, code, name, category, content, rate, stock, tax_percent)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [year, String(code || ''), name, category, content, rate, stock, taxPercent]
@@ -184,7 +177,7 @@ router.put('/products/:id', async (req, res) => {
   const id = req.params.id;
   const { code, name, category, content, rate, stock, taxPercent } = req.body;
   try {
-    await pool.query(
+    await dbQuery(
       `UPDATE products SET
         code = COALESCE(?, code),
         name = COALESCE(?, name),
@@ -205,7 +198,7 @@ router.put('/products/:id', async (req, res) => {
 router.delete('/products/:id', async (req, res) => {
   const id = req.params.id;
   try {
-    await pool.query('DELETE FROM products WHERE id = ?', [id]);
+    await dbQuery('DELETE FROM products WHERE id = ?', [id]);
     res.json({ success: true, id: Number(id) });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -216,16 +209,16 @@ router.delete('/products/:id', async (req, res) => {
 router.get('/customers', async (req, res) => {
   const year = req.query.year || '2026';
   try {
-    const [rows] = await pool.query('SELECT * FROM customers WHERE year = ? ORDER BY id ASC', [year]);
+    const [rows] = await dbQuery('SELECT * FROM customers WHERE year = ? ORDER BY id ASC', [year]);
     if (rows.length === 0) {
       for (const c of defaultCustomers) {
-        await pool.query(
+        await dbQuery(
           `INSERT INTO customers (year, name, mobile, address, gstin, total_orders, balance)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [year, c.name, c.mobile, c.address, c.gstin || '', c.totalOrders || 0, c.balance || 0]
         );
       }
-      const [seeded] = await pool.query('SELECT * FROM customers WHERE year = ? ORDER BY id ASC', [year]);
+      const [seeded] = await dbQuery('SELECT * FROM customers WHERE year = ? ORDER BY id ASC', [year]);
       return res.json(seeded.map(formatCustomer));
     }
     res.json(rows.map(formatCustomer));
@@ -251,7 +244,7 @@ router.post('/customers', async (req, res) => {
   const { year = '2026', name, mobile = '', address = '', gstin = '', totalOrders = 0, balance = 0 } = req.body;
   if (!name) return res.status(400).json({ error: 'Customer name is required' });
   try {
-    const [result] = await pool.query(
+    const [result] = await dbQuery(
       `INSERT INTO customers (year, name, mobile, address, gstin, total_orders, balance)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [year, name, mobile, address, gstin, totalOrders, balance]
@@ -275,7 +268,7 @@ router.put('/customers/:id', async (req, res) => {
   const id = req.params.id;
   const { name, mobile, address, gstin, totalOrders, balance } = req.body;
   try {
-    await pool.query(
+    await dbQuery(
       `UPDATE customers SET
         name = COALESCE(?, name),
         mobile = COALESCE(?, mobile),
@@ -295,7 +288,7 @@ router.put('/customers/:id', async (req, res) => {
 router.delete('/customers/:id', async (req, res) => {
   const id = req.params.id;
   try {
-    await pool.query('DELETE FROM customers WHERE id = ?', [id]);
+    await dbQuery('DELETE FROM customers WHERE id = ?', [id]);
     res.json({ success: true, id: Number(id) });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -306,7 +299,7 @@ router.delete('/customers/:id', async (req, res) => {
 router.get('/invoices', async (req, res) => {
   const year = req.query.year || '2026';
   try {
-    const [rows] = await pool.query('SELECT * FROM invoices WHERE year = ? ORDER BY bill_no DESC', [year]);
+    const [rows] = await dbQuery('SELECT * FROM invoices WHERE year = ? ORDER BY bill_no DESC', [year]);
     res.json(rows.map(formatInvoice));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -499,7 +492,7 @@ router.delete('/invoices/:billNo', async (req, res) => {
 router.delete('/invoices-all', async (req, res) => {
   const year = req.query.year || '2026';
   try {
-    await pool.query('DELETE FROM invoices WHERE year = ?', [year]);
+    await dbQuery('DELETE FROM invoices WHERE year = ?', [year]);
     res.json({ success: true, message: `Cleared all invoices for year ${year}` });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -510,13 +503,13 @@ router.delete('/invoices-all', async (req, res) => {
 router.get('/stats', async (req, res) => {
   const year = req.query.year || '2026';
   try {
-    const [[prodCount]] = await pool.query('SELECT COUNT(*) as count FROM products WHERE year = ?', [year]);
-    const [[custCount]] = await pool.query('SELECT COUNT(*) as count FROM customers WHERE year = ?', [year]);
-    const [[invStats]] = await pool.query(
+    const [[prodCount]] = await dbQuery('SELECT COUNT(*) as count FROM products WHERE year = ?', [year]);
+    const [[custCount]] = await dbQuery('SELECT COUNT(*) as count FROM customers WHERE year = ?', [year]);
+    const [[invStats]] = await dbQuery(
       'SELECT COUNT(*) as count, COALESCE(SUM(gross_total), 0) as totalGross, COALESCE(SUM(net_amount), 0) as totalNet FROM invoices WHERE year = ?',
       [year]
     );
-    const [years] = await pool.query('SELECT year FROM years ORDER BY year ASC');
+    const [years] = await dbQuery('SELECT year FROM years ORDER BY year ASC');
 
     res.json({
       ok: true,

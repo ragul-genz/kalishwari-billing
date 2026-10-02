@@ -9,7 +9,6 @@ import { initDatabase } from './server/db.js';
 // Force IPv4 and public DNS to avoid mobile network IPv6 NAT64 disconnects
 try {
   dns.setDefaultResultOrder('ipv4first');
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
 } catch (e) {}
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,16 +40,23 @@ app.use((req, res, next) => {
   });
 });
 
-async function start() {
-  try {
-    await initDatabase();
-    app.listen(PORT, () => {
-      console.log(`TiDB Billing Server running on http://localhost:${PORT}`);
-    });
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
+function start() {
+  app.listen(PORT, () => {
+    console.log(`TiDB Billing Server running on http://localhost:${PORT}`);
+  });
+
+  const connectWithRetry = async (attempt = 1) => {
+    try {
+      console.log(`Connecting to TiDB Cloud (attempt ${attempt})...`);
+      await initDatabase();
+      console.log('✓ TiDB Cloud Database Connected & Schema Verified!');
+    } catch (err) {
+      console.warn(`[TiDB Startup] Connection attempt ${attempt} delayed: ${err.message}. Retrying in 4s...`);
+      setTimeout(() => connectWithRetry(attempt + 1), 4000);
+    }
+  };
+
+  connectWithRetry();
 }
 
 start();

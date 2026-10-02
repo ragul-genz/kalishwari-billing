@@ -4,10 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dns from 'dns';
 
-// Force IPv4 and use reliable DNS servers (Google / Cloudflare) to prevent mobile hotspot IPv6 NAT64 disconnects
+// Prefer IPv4 for AWS Global Accelerator stability across Indian cellular providers
 try {
   dns.setDefaultResultOrder('ipv4first');
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
 } catch (e) {}
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,12 +25,13 @@ const dbConfig = {
     rejectUnauthorized: true
   },
   waitForConnections: true,
-  connectionLimit: 10,
-  maxIdle: 10,
-  idleTimeout: 60000,
-  connectTimeout: 20000,
+  // Keep connection pool lean (2-3 connections) so idle sockets are not abruptly reset by AWS NAT
+  connectionLimit: 3,
+  maxIdle: 2,
+  idleTimeout: 25000,
+  connectTimeout: 30000,
   enableKeepAlive: true,
-  keepAliveInitialDelay: 10000
+  keepAliveInitialDelay: 3000
 };
 
 export const pool = mysql.createPool(dbConfig);
@@ -40,29 +40,29 @@ export const pool = mysql.createPool(dbConfig);
 pool.on('connection', (connection) => {
   connection.on('error', (err) => {
     if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
-      console.warn('[TiDB] Socket reset by cloud gateway, connection will be recycled.');
+      // Normal cloud gateway idle recycling; pool will automatically create a fresh socket
     } else {
-      console.warn('[TiDB] Pool connection error:', err.message);
+      console.warn('[TiDB] Connection event:', err.message);
     }
   });
 });
 
-// Periodic keep-alive heartbeat (every 20s) to prevent TiDB Serverless & cloud NAT gateways from sleeping/closing idle connections
+// Periodic keep-alive heartbeat (every 15s) to keep TiDB Serverless cluster warm and active
 let heartbeatTimer = null;
 export function startDbHeartbeat() {
   if (heartbeatTimer) return;
   heartbeatTimer = setInterval(async () => {
     try {
-      await pool.query('SELECT 1');
+      await pool.query('SELECT 1 as ping');
     } catch (err) {
-      console.warn('[TiDB Heartbeat] Keepalive ping failed, pool will reconnect on next query:', err.message);
+      // If idle socket was reset, next query will automatically get a clean fresh connection
     }
-  }, 20000);
+  }, 15000);
   if (heartbeatTimer.unref) heartbeatTimer.unref();
 }
 
-// Resilient query wrapper with automatic reconnect retry
-export async function dbQuery(sql, params = [], retries = 2) {
+// Resilient query wrapper with automatic reconnect retry and exponential backoff
+export async function dbQuery(sql, params = [], retries = 3) {
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
       return await pool.query(sql, params);
@@ -72,10 +72,15 @@ export async function dbQuery(sql, params = [], retries = 2) {
         err.code === 'PROTOCOL_CONNECTION_LOST' ||
         err.code === 'ETIMEDOUT' ||
         err.code === 'EPIPE' ||
-        err.code === 'ENOTFOUND';
+        err.code === 'ENOTFOUND' ||
+        err.code === 'EHOSTUNREACH' ||
+        err.message?.includes('closed') ||
+        err.message?.includes('reset');
+
       if (isRetryable && attempt <= retries) {
-        console.warn(`[TiDB] Reconnecting query attempt ${attempt} due to ${err.code}...`);
-        await new Promise(r => setTimeout(r, 400));
+        const delay = attempt === 1 ? 300 : (attempt === 2 ? 800 : 1500);
+        console.warn(`[TiDB] Reconnecting query (attempt ${attempt}/${retries}) in ${delay}ms... [${err.code || err.message}]`);
+        await new Promise(r => setTimeout(r, delay));
         continue;
       }
       throw err;

@@ -112,14 +112,14 @@ export default function App() {
         setDbInfo(status);
       } else {
         dbFailCountRef.current += 1;
-        // Only switch to offline state if 2 consecutive checks fail
-        if (dbFailCountRef.current >= 2) {
+        // Require 4 consecutive checks (over 100 seconds) before declaring offline
+        if (dbFailCountRef.current >= 4) {
           setDbConnected(false);
         }
       }
     } catch (err) {
       dbFailCountRef.current += 1;
-      if (dbFailCountRef.current >= 2) {
+      if (dbFailCountRef.current >= 4) {
         setDbConnected(false);
       }
     }
