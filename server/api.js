@@ -9,9 +9,17 @@ import { generateServerInvoicePdf } from './serverPdfGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const INVOICES_PDF_DIR = path.join(__dirname, '../uploads/invoices_pdf');
-if (!fs.existsSync(INVOICES_PDF_DIR)) {
-  fs.mkdirSync(INVOICES_PDF_DIR, { recursive: true });
+const isVercel = !!process.env.VERCEL;
+const INVOICES_PDF_DIR = isVercel
+  ? path.join('/tmp', 'invoices_pdf')
+  : path.join(__dirname, '../uploads/invoices_pdf');
+
+try {
+  if (!fs.existsSync(INVOICES_PDF_DIR)) {
+    fs.mkdirSync(INVOICES_PDF_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('PDF directory initialization notice:', e.message);
 }
 
 function extractPdfBuffer(pdfBase64) {
