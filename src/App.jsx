@@ -380,6 +380,30 @@ export default function App() {
   const [printingInvoice, setPrintingInvoice] = React.useState(null); // active invoice sent to browser print
   const [whatsappModal, setWhatsappModal] = React.useState(null); // whatsapp status popup modal
 
+  // Non-blocking in-app confirmation modal (replaces window.confirm)
+  const [confirmDialog, setConfirmDialog] = React.useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    confirmColor: '#DC2626',
+    onConfirm: null
+  });
+
+  const promptConfirm = ({ title, message, confirmLabel = 'Delete', confirmColor = '#DC2626', onConfirm }) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmLabel,
+      confirmColor,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        if (onConfirm) await onConfirm();
+      }
+    });
+  };
+
   const customerNameRef = React.useRef(null);
   const productSearchRef = React.useRef(null);
 
@@ -496,8 +520,12 @@ export default function App() {
   };
 
   const handleRemoveItem = (index) => {
+    const itemToRemove = billItems[index];
     const updated = billItems.filter((_, idx) => idx !== index);
     setBillItems(updated);
+    if (itemToRemove) {
+      showToast(`Removed "${itemToRemove.name}" from bill`);
+    }
   };
 
   const handleUpdateItemQty = (index, newQty) => {
@@ -1697,21 +1725,26 @@ export default function App() {
                               </td>
                               <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                                 <button
-                                  onClick={() => handleRemoveItem(index)}
-                                  title="Remove item"
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: '#CBD5E1',
-                                    cursor: 'pointer',
-                                    padding: '4px',
-                                    borderRadius: '4px',
-                                    transition: 'color 0.2s'
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveItem(index);
                                   }}
-                                  onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
-                                  onMouseLeave={(e) => e.currentTarget.style.color = '#CBD5E1'}
+                                  title="Remove item from bill"
+                                  style={{
+                                    background: '#FEE2E2',
+                                    border: '1px solid #FECACA',
+                                    color: '#EF4444',
+                                    cursor: 'pointer',
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.15s'
+                                  }}
                                 >
-                                  <Trash2 size={16} />
+                                  <Trash2 size={14} />
                                 </button>
                               </td>
                             </tr>
@@ -2011,7 +2044,24 @@ export default function App() {
                   </div>
 
                   <button
-                    onClick={handleResetBill}
+                    type="button"
+                    onClick={() => {
+                      if (billItems.length === 0) {
+                        handleResetBill();
+                        showToast('Bill form is already empty');
+                        return;
+                      }
+                      promptConfirm({
+                        title: 'Clear Current Bill?',
+                        message: `Are you sure you want to clear all ${billItems.length} items from this bill form?`,
+                        confirmLabel: 'Yes, Clear Bill',
+                        confirmColor: '#DC2626',
+                        onConfirm: () => {
+                          handleResetBill();
+                          showToast('Bill form cleared');
+                        }
+                      });
+                    }}
                     style={{
                       background: '#FFFFFF',
                       color: '#EF4444',
@@ -2047,6 +2097,7 @@ export default function App() {
             showToast={showToast}
             activeYear={activeYear}
             isLoadingData={isLoadingData}
+            promptConfirm={promptConfirm}
             loadProducts={async () => {
               const p = await fetchProducts(activeYear);
               if (Array.isArray(p) && p.length > 0) setProducts(p);
@@ -2090,6 +2141,7 @@ export default function App() {
             showToast={showToast}
             activeYear={activeYear}
             isLoadingData={isLoadingData}
+            promptConfirm={promptConfirm}
             loadCustomers={async () => {
               const c = await fetchCustomers(activeYear);
               if (Array.isArray(c) && c.length > 0) setCustomers(c);
@@ -2108,6 +2160,7 @@ export default function App() {
             setPreviewInvoice={setPreviewInvoice}
             setWhatsappModal={setWhatsappModal}
             setPrintingInvoice={setPrintingInvoice}
+            promptConfirm={promptConfirm}
             loadInvoices={async () => {
               const inv = await fetchInvoices(activeYear);
               if (Array.isArray(inv)) setSavedInvoices(inv);
@@ -2135,6 +2188,7 @@ export default function App() {
             products={products}
             customers={customers}
             savedInvoices={savedInvoices}
+            promptConfirm={promptConfirm}
             loadAllData={loadAllData}
           />
         )}
@@ -2958,12 +3012,18 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (confirm('Disconnect WhatsApp Bot from this computer?')) {
-                      await logoutWhatsAppBot();
-                      fetchWaStatus();
-                      showToast('WhatsApp Bot disconnected.');
-                    }
+                  onClick={() => {
+                    promptConfirm({
+                      title: 'Disconnect WhatsApp Bot?',
+                      message: 'Are you sure you want to disconnect WhatsApp Bot from this computer?',
+                      confirmLabel: 'Disconnect Bot',
+                      confirmColor: '#DC2626',
+                      onConfirm: async () => {
+                        await logoutWhatsAppBot();
+                        fetchWaStatus();
+                        showToast('WhatsApp Bot disconnected.');
+                      }
+                    });
                   }}
                   style={{
                     marginTop: '16px',
@@ -3080,6 +3140,94 @@ export default function App() {
         </div>
       )}
 
+      {/* Non-blocking Global Confirm Dialog */}
+      {confirmDialog.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '20px',
+            maxWidth: '460px',
+            width: '100%',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            border: '1px solid #E2E8F0',
+            animation: 'fadeIn 0.15s ease-out'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: '#FEE2E2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#DC2626',
+                flexShrink: 0
+              }}>
+                <Trash2 size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: '800', color: '#0F172A' }}>
+                  {confirmDialog.title || 'Confirm Action'}
+                </h3>
+                <p style={{ margin: 0, fontSize: '13.5px', color: '#64748B', lineHeight: '1.5' }}>
+                  {confirmDialog.message}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid #CBD5E1',
+                  background: '#F8FAFC',
+                  color: '#475569',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: confirmDialog.confirmColor || '#DC2626',
+                  color: '#FFFFFF',
+                  fontWeight: '800',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(220, 38, 38, 0.35)'
+                }}
+              >
+                {confirmDialog.confirmLabel || 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -3092,7 +3240,7 @@ export default function App() {
 // -------------------------------------------------------------
 // SUB-VIEW: Product Master & Stock Inventory Component
 // -------------------------------------------------------------
-function ProductMasterView({ products, setProducts, showToast, activeYear, loadProducts }) {
+function ProductMasterView({ products, setProducts, showToast, activeYear, loadProducts, promptConfirm }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategory, setSelectedCategory] = React.useState('All');
   const [stockFilter, setStockFilter] = React.useState('All'); // 'All' | 'in_stock' | 'low_stock' | 'out_of_stock'
@@ -3210,14 +3358,7 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
     if (stockModal.mode === 'add') {
       newStock = currentStock + adjustQty;
     } else {
-      if (currentStock < adjustQty) {
-        if (!confirm(`Current stock is ${currentStock}. Deducting ${adjustQty} will reduce stock to 0. Continue?`)) {
-          return;
-        }
-        newStock = 0;
-      } else {
-        newStock = currentStock - adjustQty;
-      }
+      newStock = Math.max(0, currentStock - adjustQty);
     }
 
     const updated = { ...targetProduct, stock: newStock };
@@ -3297,16 +3438,29 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
   };
 
   // Delete product
-  const handleDeleteProduct = async (id, name) => {
-    if (confirm(`Are you sure you want to delete "${name || 'this item'}" from TiDB catalog?`)) {
-      setProducts(products.filter(p => p.id !== id));
+  const handleDeleteProduct = (id, name) => {
+    const doDelete = async () => {
+      setProducts(prev => prev.filter(p => String(p.id) !== String(id) && String(p.code) !== String(id)));
       try {
         await apiDeleteProduct(id);
-        showToast('Product deleted from TiDB Cloud');
+        if (loadProducts) await loadProducts();
+        showToast(`✓ Product "${name || 'Item'}" deleted from TiDB Cloud`);
       } catch (err) {
         console.warn('Deleted locally, TiDB error:', err);
         showToast('Product removed locally');
       }
+    };
+
+    if (promptConfirm) {
+      promptConfirm({
+        title: `Delete "${name || 'Product'}"?`,
+        message: `Are you sure you want to permanently delete "${name || 'this item'}" from the TiDB Cloud catalog?`,
+        confirmLabel: 'Yes, Delete Product',
+        confirmColor: '#DC2626',
+        onConfirm: doDelete
+      });
+    } else {
+      doDelete();
     }
   };
 
@@ -4311,7 +4465,7 @@ function ProductMasterView({ products, setProducts, showToast, activeYear, loadP
 // -------------------------------------------------------------
 // SUB-VIEW: Customer Master Component
 // -------------------------------------------------------------
-function CustomerMasterView({ customers, setCustomers, showToast, activeYear, loadCustomers }) {
+function CustomerMasterView({ customers, setCustomers, showToast, activeYear, loadCustomers, promptConfirm }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isReloading, setIsReloading] = React.useState(false);
@@ -4396,15 +4550,28 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear, lo
     }
   };
 
-  const handleDeleteCustomer = async (id, custName) => {
-    if (confirm(`Delete customer "${custName}" from TiDB Cloud?`)) {
-      setCustomers(customers.filter(item => item.id !== id));
+  const handleDeleteCustomer = (id, custName) => {
+    const doDelete = async () => {
+      setCustomers(prev => prev.filter(item => String(item.id) !== String(id) && String(item.mobile) !== String(id)));
       try {
         await apiDeleteCustomer(id);
-        showToast('Customer deleted from TiDB Cloud');
+        if (loadCustomers) await loadCustomers();
+        showToast(`✓ Customer "${custName || 'Record'}" deleted from TiDB Cloud`);
       } catch (err) {
         showToast('Customer deleted locally');
       }
+    };
+
+    if (promptConfirm) {
+      promptConfirm({
+        title: `Delete Customer "${custName || 'Customer'}"?`,
+        message: `Are you sure you want to permanently delete customer "${custName}" from TiDB Cloud?`,
+        confirmLabel: 'Yes, Delete Customer',
+        confirmColor: '#DC2626',
+        onConfirm: doDelete
+      });
+    } else {
+      doDelete();
     }
   };
 
@@ -4723,7 +4890,7 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear, lo
 // -------------------------------------------------------------
 // SUB-VIEW: Reports & Saved Invoices
 // -------------------------------------------------------------
-function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear, setPreviewInvoice, loadInvoices, reloadProducts, setWhatsappModal, setPrintingInvoice }) {
+function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear, setPreviewInvoice, loadInvoices, reloadProducts, setWhatsappModal, setPrintingInvoice, promptConfirm }) {
   const [isReloading, setIsReloading] = React.useState(false);
   const totalRevenue = savedInvoices.reduce((acc, curr) => acc + (Number(curr.netAmount) || 0), 0);
   const totalGross = savedInvoices.reduce((acc, curr) => acc + (Number(curr.grossTotal) || 0), 0);
@@ -4746,16 +4913,31 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
     doc.save(`Sri_Kaliswari_Bill_SKC_${inv.billNo}_${safeCustomer}.pdf`);
   };
 
-  const handleDeleteInvoice = async (billNo) => {
-    if (confirm(`Are you sure you want to delete Invoice #SKC ${billNo}? Product stocks will be restored in TiDB.`)) {
-      setSavedInvoices(savedInvoices.filter(i => i.billNo !== billNo));
+  const handleDeleteInvoice = (inv) => {
+    const bNo = inv.billNo || inv.id;
+    const cust = inv.customerName || 'Customer';
+    const doDelete = async () => {
+      setSavedInvoices(prev => prev.filter(i => String(i.billNo) !== String(bNo) && String(i.id) !== String(bNo)));
       try {
-        await apiDeleteInvoice(billNo, activeYear);
+        await apiDeleteInvoice(bNo, activeYear);
         if (reloadProducts) await reloadProducts();
-        showToast(`Bill #SKC ${billNo} removed & product stock restored in TiDB!`);
+        if (loadInvoices) await loadInvoices();
+        showToast(`✓ Bill #SKC ${bNo} removed & product stock restored in TiDB!`);
       } catch (err) {
-        showToast(`Bill #SKC ${billNo} removed locally`);
+        showToast(`Bill #SKC ${bNo} removed locally`);
       }
+    };
+
+    if (promptConfirm) {
+      promptConfirm({
+        title: `Delete Invoice #SKC ${bNo}?`,
+        message: `Delete invoice for ${cust} (₹${inv.netAmount || 0})? This will permanently remove the bill and restore cracker item stocks in TiDB Cloud.`,
+        confirmLabel: 'Yes, Delete Bill',
+        confirmColor: '#DC2626',
+        onConfirm: doDelete
+      });
+    } else {
+      doDelete();
     }
   };
 
@@ -4824,15 +5006,29 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
 
             {savedInvoices.length > 0 && (
               <button
-                onClick={async () => {
-                  if (confirm('Clear all saved invoices history and reset bill number to 1?')) {
+                type="button"
+                onClick={() => {
+                  const doClear = async () => {
                     setSavedInvoices([]);
                     try {
                       await apiClearAllInvoices(activeYear);
+                      if (loadInvoices) await loadInvoices();
                       showToast('All invoices cleared from TiDB Cloud. Counter reset to #1.');
                     } catch (err) {
                       showToast('All invoices cleared locally.');
                     }
+                  };
+
+                  if (promptConfirm) {
+                    promptConfirm({
+                      title: 'Clear All Invoices History?',
+                      message: `Are you sure you want to delete all ${savedInvoices.length} invoices for Year ${activeYear}? This will reset the invoice counter to #1.`,
+                      confirmLabel: 'Yes, Clear All Invoices',
+                      confirmColor: '#DC2626',
+                      onConfirm: doClear
+                    });
+                  } else {
+                    doClear();
                   }
                 }}
                 style={{
@@ -5042,7 +5238,7 @@ function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, acti
                       <button
                         type="button"
                         title="Delete bill and restore stock in TiDB"
-                        onClick={() => handleDeleteInvoice(inv.billNo)}
+                        onClick={() => handleDeleteInvoice(inv)}
                         style={{
                           background: '#FEE2E2',
                           border: '1px solid #FECACA',
@@ -5086,6 +5282,7 @@ function SettingsView({
   products,
   customers,
   savedInvoices,
+  promptConfirm,
   loadAllData
 }) {
   const [formData, setFormData] = React.useState({ ...company });
@@ -5165,29 +5362,40 @@ function SettingsView({
     showToast(`Switched active workspace to Financial Year ${yr}!`);
   };
 
-  const handleSyncToDb = async () => {
-    if (!confirm(`Sync all current products (${products.length}), customers (${customers.length}), and bills (${savedInvoices.length}) for Year ${activeYear} to TiDB Cloud?`)) {
-      return;
-    }
-    setIsSyncing(true);
-    try {
-      const res = await syncLocalStorageToDb({
-        year: activeYear,
-        company: formData,
-        products,
-        customers,
-        invoices: savedInvoices
-      });
-      if (res && res.success) {
-        showToast('All data successfully synced to TiDB Cloud!');
-        fetchDbStats();
-      } else {
-        showToast(res?.error || 'Sync completed with warnings');
+  const handleSyncToDb = () => {
+    const doSync = async () => {
+      setIsSyncing(true);
+      try {
+        const res = await syncLocalStorageToDb({
+          year: activeYear,
+          company: formData,
+          products,
+          customers,
+          invoices: savedInvoices
+        });
+        if (res && res.success) {
+          showToast('All data successfully synced to TiDB Cloud!');
+          fetchDbStats();
+        } else {
+          showToast(res?.error || 'Sync completed with warnings');
+        }
+      } catch (err) {
+        showToast('Sync failed: ' + err.message);
+      } finally {
+        setIsSyncing(false);
       }
-    } catch (err) {
-      showToast('Sync failed: ' + err.message);
-    } finally {
-      setIsSyncing(false);
+    };
+
+    if (promptConfirm) {
+      promptConfirm({
+        title: `Sync Data to TiDB Cloud (Year ${activeYear})?`,
+        message: `Sync all current products (${products.length}), customers (${customers.length}), and bills (${savedInvoices.length}) for Year ${activeYear} to TiDB Cloud?`,
+        confirmLabel: 'Yes, Sync to TiDB',
+        confirmColor: '#2563EB',
+        onConfirm: doSync
+      });
+    } else {
+      doSync();
     }
   };
 

@@ -224,8 +224,8 @@ router.put('/products/:id', async (req, res) => {
 router.delete('/products/:id', async (req, res) => {
   const id = req.params.id;
   try {
-    await dbQuery('DELETE FROM products WHERE id = ?', [id]);
-    res.json({ success: true, id: Number(id) });
+    await dbQuery('DELETE FROM products WHERE id = ? OR code = ?', [id, id]);
+    res.json({ success: true, id: Number(id) || id });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -314,8 +314,8 @@ router.put('/customers/:id', async (req, res) => {
 router.delete('/customers/:id', async (req, res) => {
   const id = req.params.id;
   try {
-    await dbQuery('DELETE FROM customers WHERE id = ?', [id]);
-    res.json({ success: true, id: Number(id) });
+    await dbQuery('DELETE FROM customers WHERE id = ? OR mobile = ?', [id, id]);
+    res.json({ success: true, id: Number(id) || id });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -482,7 +482,7 @@ router.delete('/invoices/:billNo', async (req, res) => {
   try {
     await conn.beginTransaction();
     // Retrieve items before delete to restore product stocks
-    const [rows] = await conn.query('SELECT items, type FROM invoices WHERE year = ? AND bill_no = ?', [year, billNo]);
+    const [rows] = await conn.query('SELECT items, type FROM invoices WHERE year = ? AND (bill_no = ? OR id = ?)', [year, billNo, billNo]);
     if (rows.length > 0) {
       const inv = rows[0];
       if (inv.type !== 'quotation') {
@@ -504,9 +504,9 @@ router.delete('/invoices/:billNo', async (req, res) => {
       }
     }
 
-    await conn.query('DELETE FROM invoices WHERE year = ? AND bill_no = ?', [year, billNo]);
+    await conn.query('DELETE FROM invoices WHERE year = ? AND (bill_no = ? OR id = ?)', [year, billNo, billNo]);
     await conn.commit();
-    res.json({ success: true, billNo: Number(billNo) });
+    res.json({ success: true, billNo: Number(billNo) || billNo });
   } catch (error) {
     await conn.rollback();
     res.status(500).json({ error: error.message });
