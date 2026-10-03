@@ -1115,22 +1115,48 @@
   .login-error { margin: 0 1.6rem; }
   .login-footer { padding: 1rem 1.6rem 1.8rem; }
 
-  /* HEADER — NON-STICKY ON MOBILE SO IT SCROLLS AWAY NATURALLY */
+  /* HEADER — NON-STICKY & SIDE SCROLLABLE TOP BUTTONS BAR ON MOBILE */
   .app-header, .top-header-bar {
-    padding: 8px 12px !important;
+    padding: 10px 12px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
     gap: 8px !important;
     position: relative !important;
     top: auto !important;
     z-index: 10 !important;
     max-width: 100vw !important;
+    box-sizing: border-box !important;
   }
   .app-header-logo { width: 36px; height: 36px; min-width: 36px; border-radius: 10px; }
   .app-header-title { font-size: 14px; max-width: 140px; }
   .app-header-badge { display: none; }
   .app-header-subtitle { display: none; }
   .app-date-pill { display: none; }
-  .app-new-bill-btn-label { display: none; }
-  .app-new-bill-btn { padding: 8px 10px; border-radius: 10px; }
+  .app-new-bill-btn-label { display: inline !important; }
+  .app-new-bill-btn { padding: 8px 12px; border-radius: 10px; }
+
+  /* TOP HEADER RIGHT BUTTONS — SMOOTH TOUCH SIDE SCROLL BAR */
+  .top-header-right {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+    padding: 6px 2px 4px 2px !important;
+    border-top: 1px solid #F1F5F9 !important;
+    box-sizing: border-box !important;
+  }
+  .top-header-right::-webkit-scrollbar {
+    display: none !important;
+  }
+  .top-header-right > * {
+    flex-shrink: 0 !important;
+  }
 
   /* NAVIGATION — SLEEK HORIZONTAL TOUCH SCROLL TABS THAT SCROLL AWAY WITH PAGE */
   .app-nav {
