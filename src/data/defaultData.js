@@ -54,13 +54,7 @@ export const defaultCompany = {
   ]
 };
 
-export const defaultCustomers = [
-  { id: 1, name: 'Direct Counter Customer', mobile: '9842100000', address: 'Sivakasi Counter', totalOrders: 0, balance: 0 },
-  { id: 2, name: 'Senthil Kumar', mobile: '9842145678', address: 'Gandhi Nagar, Madurai', totalOrders: 0, balance: 0 },
-  { id: 3, name: 'Murugan Wholesalers', mobile: '9443218765', address: 'Big Bazaar Street, Trichy', totalOrders: 0, balance: 0 },
-  { id: 4, name: 'Karthik Raja', mobile: '8870192345', address: 'Anna Nagar, Chennai', totalOrders: 0, balance: 0 },
-  { id: 5, name: 'Radha Agencies', mobile: '9944556677', address: 'Goods Shed Street, Coimbatore', totalOrders: 0, balance: 0 }
-];
+export const defaultCustomers = [];
 
 export const defaultProducts = [
   // ONE SOUND CRACKERS (Page 2)

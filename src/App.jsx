@@ -266,11 +266,11 @@ export default function App() {
         setProducts(loadFallback('kalieswari_products', defaultProducts));
       }
 
-      if (Array.isArray(cust) && cust.length > 0) {
+      if (Array.isArray(cust)) {
         setCustomers(cust);
         localStorage.setItem(`kalieswari_customers_${targetYear}`, JSON.stringify(cust));
       } else {
-        setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
+        setCustomers(loadFallback('kalieswari_customers', []));
       }
 
       let loadedInvoices = [];
@@ -291,7 +291,7 @@ export default function App() {
       console.error('Error connecting to TiDB, using fallback:', err);
       setCompany(loadFallback('kalieswari_company', defaultCompany));
       setProducts(loadFallback('kalieswari_products', defaultProducts));
-      setCustomers(loadFallback('kalieswari_customers', defaultCustomers));
+      setCustomers(loadFallback('kalieswari_customers', []));
       const loadedInvoices = loadFallback('kalieswari_invoices', []);
       setSavedInvoices(loadedInvoices);
       const nextBillNo = loadedInvoices.length > 0
