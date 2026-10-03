@@ -787,32 +787,6 @@ export default function App() {
             <div className="login-logo">🎆</div>
             <h1 className="login-title">Sri Kaliswari Crackers</h1>
             <p className="login-subtitle">Billing &amp; Inventory Management</p>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginTop: '10px',
-              padding: '4px 12px',
-              borderRadius: '999px',
-              fontSize: '11px',
-              fontWeight: '700',
-              background: 'rgba(16, 185, 129, 0.15)',
-              border: '1px solid rgba(16, 185, 129, 0.35)',
-              color: '#34D399',
-              cursor: 'pointer'
-            }}
-            onClick={refreshDbStatus}
-            title='TiDB Cloud MySQL is Online & Connected.'>
-              <span style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: '#10B981',
-                boxShadow: '0 0 6px #10B981'
-              }}></span>
-              <Database size={12} />
-              <span>TiDB Cloud: Online (kalishwaribilling)</span>
-            </div>
           </div>
 
           {/* Error */}
