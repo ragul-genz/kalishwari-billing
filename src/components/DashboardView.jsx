@@ -613,8 +613,8 @@ export function DashboardView({
                 width: '40px',
                 height: '40px',
                 borderRadius: '10px',
-                background: dbConnected ? '#DCFCE7' : '#FEE2E2',
-                color: dbConnected ? '#16A34A' : '#DC2626',
+                background: '#DCFCE7',
+                color: '#16A34A',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
