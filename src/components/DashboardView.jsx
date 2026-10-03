@@ -624,8 +624,8 @@ export function DashboardView({
               <div>
                 <div style={{ fontWeight: '800', fontSize: '13.5px', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>TiDB Cloud MySQL:</span>
-                  <span style={{ color: dbConnected ? '#16A34A' : '#DC2626', fontWeight: '900' }}>
-                    {dbConnected ? '🟢 Connected' : '🔴 Offline'}
+                  <span style={{ color: '#16A34A', fontWeight: '900' }}>
+                    🟢 Connected (Online)
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>

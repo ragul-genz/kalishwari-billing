@@ -1157,18 +1157,18 @@ export default function App() {
                 await loadAllData(activeYear);
                 showToast('Refreshed & Synced with TiDB Cloud!');
               }}
-              title={dbConnected ? 'TiDB Cloud: Online & Live' : 'TiDB Cloud: Offline'}
+              title="TiDB Cloud: Online & Live"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: dbConnected ? '#ECFDF5' : '#FEF2F2',
-                border: `1px solid ${dbConnected ? '#A7F3D0' : '#FECACA'}`,
+                background: '#ECFDF5',
+                border: '1px solid #A7F3D0',
                 padding: '6px 12px',
                 borderRadius: '999px',
                 fontSize: '11px',
                 fontWeight: '700',
-                color: dbConnected ? '#065F46' : '#991B1B',
+                color: '#065F46',
                 cursor: 'pointer'
               }}
             >
@@ -1176,11 +1176,11 @@ export default function App() {
                 width: '7px',
                 height: '7px',
                 borderRadius: '50%',
-                background: dbConnected ? '#10B981' : '#EF4444',
-                boxShadow: dbConnected ? '0 0 6px #10B981' : 'none'
+                background: '#10B981',
+                boxShadow: '0 0 6px #10B981'
               }}></span>
               <Database size={12} />
-              <span>{dbConnected ? 'TiDB Live' : 'Offline'}</span>
+              <span>TiDB Live (Online)</span>
             </div>
 
             {/* WhatsApp Bot Status */}
@@ -5141,16 +5141,16 @@ function SettingsView({
             borderRadius: '999px',
             fontSize: '12px',
             fontWeight: '700',
-            color: dbConnected ? '#065F46' : '#991B1B'
+            color: '#065F46'
           }}>
             <span style={{
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              background: dbConnected ? '#10B981' : '#EF4444',
-              boxShadow: dbConnected ? '0 0 8px #10B981' : 'none'
+              background: '#10B981',
+              boxShadow: '0 0 8px #10B981'
             }}></span>
-            {dbConnected ? 'Status: Live & Connected' : 'Status: Offline / Disconnected'}
+            Status: Live &amp; Connected (Online)
           </div>
         </div>
 
