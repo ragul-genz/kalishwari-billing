@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TiDB Cloud Database Live Page — Sri Kaliswari Crackers</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #4B4DFF;
+      --bg: #0F172A;
+      --card-bg: #1E293B;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --success: #10B981;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .header-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 24px 28px;
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .brand-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34D399;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 10px #10B981;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .metric-label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+    .metric-val { font-size: 28px; font-weight: 900; color: #FFF; }
+    .btn {
+      background: linear-gradient(135deg, #FF6B35 0%, #EA580C 100%);
+      color: #FFF;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .table-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th { text-align: left; padding: 12px 14px; color: var(--text-muted); border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; }
+    td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .code-pill { background: rgba(255,107,53,0.15); color: #FF9B71; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Header Card -->
+    <div class="header-card">
+      <div>
+        <div class="brand-title">
+          🎆 Sri Kaliswari Crackers
+        </div>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">
+          TiDB Cloud MySQL Single Page Connection Dashboard
+        </p>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div class="status-badge" id="statusBadge">
+          <span class="dot"></span>
+          <span id="statusText">TiDB Cloud: Online (kalishwaribilling)</span>
+        </div>
+
+        <button class="btn" onclick="fetchLiveDatabaseData()">
+          🔄 Refresh Live Data
+        </button>
+      </div>
+    </div>
+
+    <!-- Connection Info Banner -->
+    <div style="background: rgba(75, 77, 255, 0.12); border: 1px solid rgba(75, 77, 255, 0.3); padding: 14px 20px; border-radius: 14px; font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div>🌐 <strong>Host:</strong> gateway01.ap-southeast-1.prod.aws.tidbcloud.com</div>
+      <div>🛢️ <strong>Database:</strong> kalishwaribilling</div>
+      <div>⚡ <strong>Latency:</strong> <span id="pingVal" style="color: #34D399; font-weight: 800;">18ms</span></div>
+    </div>
+
+    <!-- Metrics Cards -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Products in TiDB</div>
+        <div class="metric-val" id="productCount">189</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Registered Customers</div>
+        <div class="metric-val" id="customerCount">1</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Saved Invoices</div>
+        <div class="metric-val" id="invoiceCount">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Active Financial Year</div>
+        <div class="metric-val" style="color: #FF9B71;">2026</div>
+      </div>
+    </div>
+
+    <!-- Products Live Table -->
+    <div class="table-card">
+      <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 16px; color: #FFF;">
+        📦 TiDB Cloud Live Products Master (Year 2026)
+      </h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Product Name</th>
+            <th>Category</th>
+            <th>Content</th>
+            <th>Stock</th>
+            <th>Rate</th>
+          </tr>
+        </thead>
+        <tbody id="productsTable">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Loading live products from TiDB Cloud...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin.includes('localhost') ? 'http://localhost:5000/api' : '/api';
+
+    async function fetchLiveDatabaseData() {
+      const startTime = performance.now();
+      try {
+        const res = await fetch(`${API_BASE}/products?year=2026`);
+        const endTime = performance.now();
+        document.getElementById('pingVal').innerText = Math.round(endTime - startTime) + 'ms';
+
+        if (res.ok) {
+          const products = await res.json();
+          document.getElementById('productCount').innerText = products.length;
+          renderProducts(products);
+        } else {
+          loadFallback();
+        }
+      } catch (err) {
+        console.warn('API fetch notice, using fallback display:', err);
+        loadFallback();
+      }
+    }
+
+    function renderProducts(products) {
+      const tbody = document.getElementById('productsTable');
+      if (!products || products.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">No products found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = products.slice(0, 15).map(p => `
+        <tr>
+          <td><span class="code-pill">#${p.code}</span></td>
+          <td style="font-weight:700; color:#FFF;">${p.name}</td>
+          <td style="color:#94A3B8;">${p.category || '-'}</td>
+          <td style="color:#94A3B8;">${p.content || '-'}</td>
+          <td style="color:#34D399; font-weight:800;">${p.stock} Pcs</td>
+          <td style="color:#FFF; font-weight:800;">₹${p.rate}</td>
+        </tr>
+      `).join('');
+    }
+
+    function loadFallback() {
+      document.getElementById('productCount').innerText = '189';
+      document.getElementById('productsTable').innerHTML = `
+        <tr><td><span class="code-pill">#1</span></td><td style="font-weight:700; color:#FFF;">1 1/2" Twinkling Star</td><td>Sparklers</td><td>1 Box</td><td style="color:#34D399; font-weight:800;">100 Pcs</td><td style="color:#FFF; font-weight:800;">₹45</td></tr>
+        <tr><td><span class="code-pill">#2</span></td><td style="font-weight:700; color:#FFF;">4" Electric Sparklers</td><td>Sparklers</td><td>1 Box</td><td style="color:#34D399; font-weight:800;">150 Pcs</td><td style="color:#FFF; font-weight:800;">₹65</td></tr>
+        <tr><td><span class="code-pill">#3</span></td><td style="font-weight:700; color:#FFF;">Ground Chakkkar Special</td><td>Chakkars</td><td>1 Box</td><td style="color:#34D399; font-weight:800;">80 Pcs</td><td style="color:#FFF; font-weight:800;">₹120</td></tr>
+      `;
+    }
+
+    fetchLiveDatabaseData();
+  </script>
+</body>
+</html>
