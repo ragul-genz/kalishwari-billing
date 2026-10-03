@@ -58,6 +58,10 @@ import { PrintableInvoice } from './components/PrintableInvoice';
 import { cleanPhoneNumber, openWhatsAppChat, shareInvoicePdf, copyInvoiceImageToClipboard, createInvoiceWhatsAppMessage } from './utils/whatsapp';
 import { PriceListView } from './components/PriceListView';
 import { StockAlertsView } from './components/StockAlertsView';
+import { DashboardView } from './components/DashboardView';
+import { StockInwardView } from './components/StockInwardView';
+import { SuppliersView } from './components/SuppliersView';
+import { ReportsView } from './components/ReportsView';
 
 import {
   checkDbStatus,
@@ -226,6 +230,20 @@ export default function App() {
   const [products, setProducts] = React.useState(defaultProducts);
   const [customers, setCustomers] = React.useState(defaultCustomers);
   const [savedInvoices, setSavedInvoices] = React.useState([]);
+
+  // Suppliers Master with LocalStorage persistence
+  const [suppliers, setSuppliers] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem(`kalieswari_suppliers_${activeYear}`);
+      return saved ? JSON.parse(saved) : [
+        { id: 1, name: 'Sri Kaliswari Fireworks Unit 1', contactPerson: 'Kaliswaran', mobile: '9842111222', address: 'Vembakottai Road, Sivakasi', gstin: '33AAECK8492Q1Z8', category: 'Crackers & Sparklers' },
+        { id: 2, name: 'Sivakasi Sparkler Industries', contactPerson: 'Murugan', mobile: '9443212345', address: 'Satchiyapuram, Sivakasi', gstin: '33AAECM1234A1Z9', category: 'Crackers & Sparklers' },
+        { id: 3, name: 'Standard Raw Material Suppliers', contactPerson: 'Ganesan', mobile: '9843198765', address: 'Thiruthangal, Sivakasi', gstin: '33AAECS5678B1Z2', category: 'Raw Materials & Chemicals' }
+      ];
+    } catch (e) {
+      return [];
+    }
+  });
 
   // Load all data from TiDB Cloud with fallback caching
   const loadAllData = React.useCallback(async (targetYear = activeYear) => {
@@ -980,29 +998,21 @@ export default function App() {
             { id: 'products', label: 'Products Master', icon: Package },
             { id: 'pricelist', label: 'Price List', icon: FileText },
             { id: 'stockalerts', label: 'Stock & Alerts', badge: lowStockCount > 0 ? String(lowStockCount) : null, badgeType: 'red', icon: AlertTriangle },
+            { id: 'stockinward', label: 'Stock Inward (வரவு)', icon: PackagePlus },
+            { id: 'suppliers', label: 'Suppliers (விநியோகம்)', icon: Truck },
             { id: 'customers', label: 'Customers', icon: Users },
             { id: 'reports', label: 'Sales History', icon: History },
-            { id: 'stockinward', label: 'Stock Inward', icon: PackagePlus },
-            { id: 'suppliers', label: 'Suppliers', icon: Truck },
             { id: 'profit', label: 'Reports & Profit', icon: TrendingUp },
             { id: 'settings', label: 'Shop Settings', icon: Settings },
           ].map(tab => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id || (tab.id === 'estimate' && activeTab === 'taxbill');
+            const isActive = activeTab === tab.id || (tab.id === 'estimate' && (activeTab === 'taxbill' || activeTab === 'quickbilling'));
             return (
               <button
                 key={tab.id}
                 type="button"
                 className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  if (tab.id === 'stockinward') {
-                    setActiveTab('stockalerts');
-                  } else if (tab.id === 'dashboard' || tab.id === 'profit') {
-                    setActiveTab('reports');
-                  } else {
-                    setActiveTab(tab.id);
-                  }
-                }}
+                onClick={() => setActiveTab(tab.id)}
               >
                 <Icon size={18} color={isActive ? '#FF6B35' : '#64748B'} />
                 <span>{tab.label}</span>
@@ -1050,12 +1060,20 @@ export default function App() {
         <header className="top-header-bar">
           <div className="top-header-left">
             <div className="top-header-title">
-              {activeTab === 'products' ? 'Products Inventory' : (
-                activeTab === 'pricelist' ? 'Price List Master' : (
-                  activeTab === 'stockalerts' || activeTab === 'stockinward' ? 'Stock & Inventory Alerts' : (
-                    activeTab === 'estimate' ? 'Quick Billing Engine' : (
-                      activeTab === 'customers' ? 'Customers Directory' : (
-                        activeTab === 'reports' ? 'Sales History & Invoices' : 'Shop Settings'
+              {activeTab === 'dashboard' ? 'Command Center Dashboard' : (
+                activeTab === 'products' ? 'Products Master' : (
+                  activeTab === 'pricelist' ? 'Price List Master' : (
+                    activeTab === 'stockalerts' ? 'Stock & Inventory Alerts' : (
+                      activeTab === 'stockinward' ? 'Stock Inward (சரக்கு வரவு)' : (
+                        activeTab === 'suppliers' ? 'Suppliers Directory (விநியோகஸ்தர்கள்)' : (
+                          activeTab === 'estimate' || activeTab === 'taxbill' || activeTab === 'quickbilling' ? 'Quick Billing Engine' : (
+                            activeTab === 'customers' ? 'Customers Directory' : (
+                              activeTab === 'reports' ? 'Sales History & Invoices' : (
+                                activeTab === 'profit' ? 'Reports & Profit Analytics' : 'Shop Settings'
+                              )
+                            )
+                          )
+                        )
                       )
                     )
                   )
@@ -1208,11 +1226,11 @@ export default function App() {
         <div className="mobile-bottom-nav">
           <div className="mobile-bottom-nav-inner">
             {[
+              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
               { id: 'estimate', label: 'Billing', icon: FileSpreadsheet },
               { id: 'products', label: 'Products', icon: Package },
-              { id: 'customers', label: 'Customers', icon: Users },
-              { id: 'reports', label: 'History', icon: TrendingUp },
-              { id: 'settings', label: 'Settings', icon: Settings },
+              { id: 'stockinward', label: 'Inward', icon: PackagePlus },
+              { id: 'reports', label: 'Reports', icon: TrendingUp },
             ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id || (activeTab === 'taxbill' && tab.id === 'estimate');
@@ -1233,6 +1251,23 @@ export default function App() {
 
       {/* Main Workspace Content */}
       <main className="app-main">
+
+        {/* VIEW 0: COMMAND CENTER DASHBOARD */}
+        {activeTab === 'dashboard' && (
+          <DashboardView
+            products={products}
+            savedInvoices={savedInvoices}
+            customers={customers}
+            activeYear={activeYear}
+            company={company}
+            dbConnected={dbConnected}
+            dbInfo={dbInfo}
+            setActiveTab={setActiveTab}
+            setPreviewInvoice={setPreviewInvoice}
+            setPrintingInvoice={setPrintingInvoice}
+            showToast={showToast}
+          />
+        )}
 
         {/* VIEW 1: QUICK BILLING ENGINE (Matching Shri Gugan Crackers reference) */}
         {(activeTab === 'estimate' || activeTab === 'taxbill' || activeTab === 'quickbilling') && (
@@ -2120,7 +2155,7 @@ export default function App() {
         )}
 
         {/* VIEW: STOCK & ALERTS / ALTER (சரக்கு இருப்பு & திருத்தம்) */}
-        {(activeTab === 'stockalerts' || activeTab === 'stockinward') && (
+        {activeTab === 'stockalerts' && (
           <StockAlertsView
             products={products}
             setProducts={setProducts}
@@ -2130,6 +2165,32 @@ export default function App() {
               const p = await fetchProducts(activeYear);
               if (Array.isArray(p) && p.length > 0) setProducts(p);
             }}
+          />
+        )}
+
+        {/* VIEW: STOCK INWARD (சரக்கு வரவு பதிவு) */}
+        {activeTab === 'stockinward' && (
+          <StockInwardView
+            products={products}
+            setProducts={setProducts}
+            suppliers={suppliers}
+            activeYear={activeYear}
+            showToast={showToast}
+            loadProducts={async () => {
+              const p = await fetchProducts(activeYear);
+              if (Array.isArray(p) && p.length > 0) setProducts(p);
+            }}
+          />
+        )}
+
+        {/* VIEW: SUPPLIERS DIRECTORY (விநியோகஸ்தர்கள்) */}
+        {activeTab === 'suppliers' && (
+          <SuppliersView
+            suppliers={suppliers}
+            setSuppliers={setSuppliers}
+            activeYear={activeYear}
+            showToast={showToast}
+            promptConfirm={promptConfirm}
           />
         )}
 
@@ -2149,8 +2210,8 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 4: REPORTS & SAVED INVOICES */}
-        {activeTab === 'reports' && (
+        {/* VIEW 4: REPORTS & PROFIT */}
+        {(activeTab === 'reports' || activeTab === 'profit') && (
           <ReportsView
             savedInvoices={savedInvoices}
             setSavedInvoices={setSavedInvoices}
@@ -2161,6 +2222,7 @@ export default function App() {
             setWhatsappModal={setWhatsappModal}
             setPrintingInvoice={setPrintingInvoice}
             promptConfirm={promptConfirm}
+            activeSubTab={activeTab === 'profit' ? 'profit' : 'history'}
             loadInvoices={async () => {
               const inv = await fetchInvoices(activeYear);
               if (Array.isArray(inv)) setSavedInvoices(inv);
@@ -4887,383 +4949,6 @@ function CustomerMasterView({ customers, setCustomers, showToast, activeYear, lo
 }
 
 
-// -------------------------------------------------------------
-// SUB-VIEW: Reports & Saved Invoices
-// -------------------------------------------------------------
-function ReportsView({ savedInvoices, setSavedInvoices, company, showToast, activeYear, setPreviewInvoice, loadInvoices, reloadProducts, setWhatsappModal, setPrintingInvoice, promptConfirm }) {
-  const [isReloading, setIsReloading] = React.useState(false);
-  const totalRevenue = savedInvoices.reduce((acc, curr) => acc + (Number(curr.netAmount) || 0), 0);
-  const totalGross = savedInvoices.reduce((acc, curr) => acc + (Number(curr.grossTotal) || 0), 0);
-
-  const handleRefresh = async () => {
-    setIsReloading(true);
-    try {
-      if (loadInvoices) await loadInvoices();
-      showToast('Invoices refreshed from TiDB Cloud!');
-    } catch (e) {
-      showToast('Refresh failed');
-    } finally {
-      setIsReloading(false);
-    }
-  };
-
-  const handleDownloadPdf = (inv) => {
-    const doc = generatePdfDocument(inv, company);
-    const safeCustomer = (inv.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
-    doc.save(`Sri_Kaliswari_Bill_SKC_${inv.billNo}_${safeCustomer}.pdf`);
-  };
-
-  const handleDeleteInvoice = (inv) => {
-    const bNo = inv.billNo || inv.id;
-    const cust = inv.customerName || 'Customer';
-    const doDelete = async () => {
-      setSavedInvoices(prev => prev.filter(i => String(i.billNo) !== String(bNo) && String(i.id) !== String(bNo)));
-      try {
-        await apiDeleteInvoice(bNo, activeYear);
-        if (reloadProducts) await reloadProducts();
-        if (loadInvoices) await loadInvoices();
-        showToast(`✓ Bill #SKC ${bNo} removed & product stock restored in TiDB!`);
-      } catch (err) {
-        showToast(`Bill #SKC ${bNo} removed locally`);
-      }
-    };
-
-    if (promptConfirm) {
-      promptConfirm({
-        title: `Delete Invoice #SKC ${bNo}?`,
-        message: `Delete invoice for ${cust} (₹${inv.netAmount || 0})? This will permanently remove the bill and restore cracker item stocks in TiDB Cloud.`,
-        confirmLabel: 'Yes, Delete Bill',
-        confirmColor: '#DC2626',
-        onConfirm: doDelete
-      });
-    } else {
-      doDelete();
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-      {/* Metric Cards */}
-      <div className="reports-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-        <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Total Invoices Generated</div>
-          <div style={{ fontSize: '26px', fontWeight: '800', color: '#4B4DFF', marginTop: '6px' }}>{savedInvoices.length}</div>
-          <div style={{ fontSize: '11px', color: '#10B981', fontWeight: '600', marginTop: '4px' }}>✓ Synced with TiDB Cloud</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Gross Sales Value</div>
-          <div style={{ fontSize: '26px', fontWeight: '800', color: '#0F172A', marginTop: '6px' }}>₹{formatNumber(totalGross)}</div>
-          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>Year {activeYear} Catalog Rates</div>
-        </div>
-
-        <div style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #EA580C 100%)', padding: '20px', borderRadius: '16px', color: '#FFF', boxShadow: '0 8px 24px rgba(255, 107, 53, 0.28)' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, textTransform: 'uppercase' }}>Total Net Realised Revenue</div>
-          <div style={{ fontSize: '26px', fontWeight: '800', marginTop: '6px' }}>₹{formatNumber(totalRevenue)}</div>
-          <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '4px' }}>Actual Cash & Billed Realisation</div>
-        </div>
-      </div>
-
-      {/* History Table */}
-      <div className="product-table-wrapper" style={{
-        background: '#FFFFFF',
-        borderRadius: '16px',
-        border: '1px solid #E2E8F0',
-        overflow: 'hidden',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
-      }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', fontWeight: '800', fontSize: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>Recent Invoices & Quotations History</span>
-            <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>
-              TiDB Connected ({savedInvoices.length} Bills)
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={isReloading}
-              style={{
-                background: '#F1F5F9',
-                color: '#334155',
-                border: '1px solid #CBD5E1',
-                padding: '6px 12px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <RefreshCw size={13} className={isReloading ? 'spin' : ''} />
-              <span>{isReloading ? 'Syncing...' : 'Refresh from TiDB'}</span>
-            </button>
-
-            {savedInvoices.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const doClear = async () => {
-                    setSavedInvoices([]);
-                    try {
-                      await apiClearAllInvoices(activeYear);
-                      if (loadInvoices) await loadInvoices();
-                      showToast('All invoices cleared from TiDB Cloud. Counter reset to #1.');
-                    } catch (err) {
-                      showToast('All invoices cleared locally.');
-                    }
-                  };
-
-                  if (promptConfirm) {
-                    promptConfirm({
-                      title: 'Clear All Invoices History?',
-                      message: `Are you sure you want to delete all ${savedInvoices.length} invoices for Year ${activeYear}? This will reset the invoice counter to #1.`,
-                      confirmLabel: 'Yes, Clear All Invoices',
-                      confirmColor: '#DC2626',
-                      onConfirm: doClear
-                    });
-                  } else {
-                    doClear();
-                  }
-                }}
-                style={{
-                  background: '#FEE2E2',
-                  color: '#DC2626',
-                  border: '1px solid #FCA5A5',
-                  padding: '6px 12px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                Clear All & Start from #1
-              </button>
-            )}
-          </div>
-        </div>
-
-        <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
-              <th style={{ padding: '14px 16px', width: '90px', textAlign: 'center' }}>Bill No</th>
-              <th style={{ padding: '14px 16px', width: '110px' }}>Date</th>
-              <th style={{ padding: '14px 16px', width: '110px' }}>Type</th>
-              <th style={{ padding: '14px 16px' }}>Customer Details</th>
-              <th style={{ padding: '14px 16px', textAlign: 'right' }}>Gross Total (₹)</th>
-              <th style={{ padding: '14px 16px', textAlign: 'center' }}>Discount</th>
-              <th style={{ padding: '14px 16px', textAlign: 'right' }}>Net Payable (₹)</th>
-              <th style={{ padding: '14px 16px', width: '150px', textAlign: 'center' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {savedInvoices.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
-                  No saved invoices found for Year {activeYear}. Create bills from Quick Billing!
-                </td>
-              </tr>
-            ) : (
-              savedInvoices.map((inv) => (
-                <tr key={inv.billNo} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#EA580C' }}>
-                    SKC {inv.billNo}
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#64748B' }}>{inv.date}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      background: inv.type === 'tax' || inv.type === 'invoice' ? '#DBEAFE' : '#FEF3C7',
-                      color: inv.type === 'tax' || inv.type === 'invoice' ? '#1E40AF' : '#92400E'
-                    }}>
-                      {inv.type ? inv.type.toUpperCase() : 'ESTIMATE'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', fontWeight: '600' }}>
-                    <div style={{ color: '#0F172A' }}>{inv.customerName}</div>
-                    <div style={{ fontSize: '11px', color: '#94A3B8' }}>{inv.customerMobile || '-'} · {inv.customerAddress || '-'}</div>
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748B' }}>
-                    ₹{formatNumber(inv.grossTotal)}
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center', color: '#EF4444', fontWeight: '700' }}>
-                    {inv.discountPercent}%
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                    ₹{formatNumber(inv.netAmount)}
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <button
-                        type="button"
-                        title="View invoice preview"
-                        onClick={() => setPreviewInvoice(inv)}
-                        style={{
-                          background: '#F1F5F9',
-                          border: '1px solid #CBD5E1',
-                          color: '#334155',
-                          padding: '5px 8px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <Eye size={13} />
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Print A4 Bill"
-                        onClick={() => {
-                          if (setPrintingInvoice) setPrintingInvoice(inv);
-                          setTimeout(() => window.print(), 350);
-                        }}
-                        style={{
-                          background: '#FFF7ED',
-                          border: '1px solid #FED7AA',
-                          color: '#EA580C',
-                          padding: '5px 8px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px'
-                        }}
-                      >
-                        <Printer size={12} />
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Download PDF to Computer"
-                        onClick={() => handleDownloadPdf(inv)}
-                        style={{
-                          background: '#EEF2FF',
-                          border: '1px solid #C7D2FE',
-                          color: '#4B4DFF',
-                          padding: '5px 8px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px'
-                        }}
-                      >
-                        <Download size={12} /> PDF
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Send WhatsApp Bill to Customer"
-                        onClick={async () => {
-                          const clean = cleanPhoneNumber(inv.customerMobile);
-                          if (!clean || clean.length < 10) {
-                            showToast('No customer phone number found in this bill');
-                            return;
-                          }
-                          let pdfBase64 = null;
-                          const safeCustomer = (inv.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-                          const filename = `Sri_Kaliswari_Bill_SKC_${inv.billNo}_${safeCustomer}.pdf`;
-                          try {
-                            const doc = generatePdfDocument(inv, company);
-                            pdfBase64 = doc.output('datauristring');
-                            if (pdfBase64) uploadInvoicePdf(inv.billNo, pdfBase64, filename);
-                          } catch (e) {}
-
-                          if (waBotStatus.connected && pdfBase64) {
-                            try {
-                              showToast('Sending direct PDF invoice to WhatsApp...');
-                              await sendInvoicePdfViaWhatsAppBot({
-                                phone: clean,
-                                billNo: inv.billNo,
-                                customerName: inv.customerName,
-                                netAmount: inv.netAmount,
-                                pdfBase64: pdfBase64,
-                                filename: filename
-                              });
-                              showToast(`✓ Official PDF Invoice #SKC ${inv.billNo} sent directly to WhatsApp!`);
-                              return;
-                            } catch (botErr) {
-                              console.warn('Bot send failed:', botErr);
-                            }
-                          }
-
-                          const invoiceMsg = createInvoiceWhatsAppMessage(inv, company);
-                          const res = openWhatsAppChat(clean, invoiceMsg, false);
-                          if (setWhatsappModal) {
-                            setWhatsappModal({
-                              isOpen: true,
-                              phone: clean,
-                              customerName: inv.customerName,
-                              billNo: inv.billNo,
-                              netAmount: inv.netAmount,
-                              waUrl: res.waUrl,
-                              invoice: inv,
-                              pdfBase64: pdfBase64,
-                              filename: filename,
-                              popupBlocked: false
-                            });
-                          }
-                        }}
-                        style={{
-                          background: '#DCFCE7',
-                          border: '1px solid #BBF7D0',
-                          color: '#16A34A',
-                          padding: '5px 8px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px'
-                        }}
-                      >
-                        <Share2 size={12} /> WhatsApp
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Delete bill and restore stock in TiDB"
-                        onClick={() => handleDeleteInvoice(inv)}
-                        style={{
-                          background: '#FEE2E2',
-                          border: '1px solid #FECACA',
-                          color: '#EF4444',
-                          cursor: 'pointer',
-                          padding: '5px 8px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-    </div>
-  );
-}
 
 // -------------------------------------------------------------
 // SUB-VIEW: Settings
