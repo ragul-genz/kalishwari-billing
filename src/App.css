@@ -1311,28 +1311,48 @@
     -webkit-overflow-scrolling: touch !important;
   }
 
-  /* QUICK BILLING MOBILE OPTIMIZATIONS */
+  /* QUICK BILLING MOBILE OPTIMIZATIONS — SINGLE ROW HORIZONTAL TOUCH SCROLL */
   .qb-status-bar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 14px;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 12px !important;
+    padding: 8px 12px !important;
+    border-radius: 12px !important;
+    margin-bottom: 4px !important;
+    box-sizing: border-box !important;
+  }
+  .qb-status-bar::-webkit-scrollbar {
+    display: none !important;
   }
   .qb-status-group {
-    gap: 12px;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 14px !important;
+    flex-shrink: 0 !important;
+  }
+  .qb-status-item {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
   }
   .qb-status-keys {
     display: none; /* Hide shortcut badges on mobile touch */
   }
   .qb-card {
-    padding: 16px 14px;
-    border-radius: 14px;
-    gap: 14px;
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    gap: 12px !important;
   }
   .qb-card-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding-bottom: 10px !important;
   }
   .qb-quick-pick {
     width: 100%;
