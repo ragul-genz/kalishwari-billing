@@ -1430,13 +1430,18 @@ export default function App() {
             {/* 3. SELECT PRODUCT CARD (Category pills + Live search + Shelf) */}
             <div className="qb-card">
               <div className="qb-card-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Search size={18} color="#FF6B35" />
-                  <h3 className="qb-card-title">Select Product</h3>
-                  <span className="qb-count-badge">{filteredProducts.length} Products Available</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Search size={18} color="#FF6B35" />
+                    <h3 className="qb-card-title">Select Product</h3>
+                    <span className="qb-count-badge">{filteredProducts.length} Products</span>
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#EA580C', background: '#FFF7ED', padding: '3px 9px', borderRadius: '12px', border: '1px solid #FFEDD5' }}>
+                    Swipe Categories 👉
+                  </span>
                 </div>
 
-                {/* Category Filter Pills */}
+                {/* Category Filter Pills (Full width horizontal touch swipe) */}
                 <div className="qb-category-scroll">
                   <button
                     type="button"
